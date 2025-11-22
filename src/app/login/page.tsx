@@ -57,12 +57,39 @@ export default function LoginPage() {
             >
               create a new account
             </Link>
+            {" • "}
+            <Link
+              href="/resend-verification"
+              className="font-medium text-primary hover:text-primary/80"
+            >
+              resend verification email
+            </Link>
           </p>
           {typeof window !== "undefined" && new URLSearchParams(window.location.search).get("verify") === "true" && (
             <div className="mt-4 rounded-md bg-blue-50 p-3">
               <p className="text-sm text-blue-800">
                 Please check your email and click the verification link before signing in.
               </p>
+            </div>
+          )}
+          {typeof window !== "undefined" && new URLSearchParams(window.location.search).get("verification_sent") === "true" && (
+            <div className="mt-4 rounded-md bg-green-50 p-3">
+              <p className="text-sm text-green-800">
+                Verification email sent! Please check your inbox.
+              </p>
+            </div>
+          )}
+          {typeof window !== "undefined" && new URLSearchParams(window.location.search).get("error") === "otp_expired" && (
+            <div className="mt-4 rounded-md bg-yellow-50 p-3">
+              <p className="text-sm text-yellow-800 mb-2">
+                Your verification link has expired.
+              </p>
+              <Link
+                href="/resend-verification"
+                className="text-sm font-medium text-yellow-900 underline hover:text-yellow-700"
+              >
+                Resend verification email
+              </Link>
             </div>
           )}
         </div>

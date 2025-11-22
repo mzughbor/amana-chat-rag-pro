@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create Q&A pair
-    const qaPair = await db.qaPair.create({
+    const qaPair = await db.qAPair.create({
       data: {
         siteId: site.id,
         question,

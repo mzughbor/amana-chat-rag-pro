@@ -5,13 +5,15 @@ import { supabaseAdmin } from "~/lib/supabase";
 import { processPDF } from "~/server/services/documentProcessor";
 import { generateEmbeddings } from "~/server/services/embeddingService";
 import { encryptApiKey, decryptApiKey } from "~/server/services/encryption";
-import crypto from "crypto";
+import { randomUUID } from "crypto";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 export async function POST(request: NextRequest) {
   try {
+    console.log("Upload request received");
     const session = await getServerAuthSessionFromRequest(request);
+    console.log("Session:", session ? "authenticated" : "not authenticated");
 
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -88,47 +90,131 @@ export async function POST(request: NextRequest) {
     try {
       // Upload to Supabase Storage
       const filePath = `${site.id}/${document.id}/${file.name}`;
-      const { data: uploadData, error: uploadError } =
-        await supabaseAdmin.storage
-          .from("documents")
-          .upload(filePath, buffer, {
-            contentType: "application/pdf",
-            upsert: false,
-          });
+      
+      // Check if bucket exists, create if not (this might fail if no permissions)
+      try {
+        const { data: uploadData, error: uploadError } =
+          await supabaseAdmin.storage
+            .from("documents")
+            .upload(filePath, buffer, {
+              contentType: "application/pdf",
+              upsert: false,
+            });
 
-      if (uploadError) {
-        throw new Error(`Storage upload failed: ${uploadError.message}`);
+        if (uploadError) {
+          // If bucket doesn't exist, try to create it (might fail without proper permissions)
+          if (uploadError.message.includes("Bucket not found") || uploadError.message.includes("not found")) {
+            console.warn("Documents bucket not found. Please create it in Supabase Dashboard → Storage");
+            // Continue without storage - we'll still process the document
+          } else {
+            throw new Error(`Storage upload failed: ${uploadError.message}`);
+          }
+        } else if (uploadData) {
+          // Update document with storage path only if upload succeeded
+          await db.document.update({
+            where: { id: document.id },
+            data: { storagePath: filePath },
+          });
+        }
+      } catch (storageError) {
+        console.warn("Storage upload failed, continuing without storage:", storageError);
+        // Continue processing even if storage fails
       }
 
-      // Update document with storage path
-      await db.document.update({
-        where: { id: document.id },
-        data: { storagePath: filePath },
-      });
-
       // Process PDF: extract text and chunk
-      const chunks = await processPDF(buffer, file.name);
+      console.log("Processing PDF...");
+      let chunks: Array<{ text: string; metadata: any }>;
+      try {
+        chunks = await processPDF(buffer, file.name);
+        console.log(`PDF processed into ${chunks.length} chunks`);
+        if (!chunks || chunks.length === 0) {
+          throw new Error("No text could be extracted from the PDF");
+        }
+      } catch (pdfError) {
+        console.error("PDF processing error:", pdfError);
+        throw new Error(`PDF processing failed: ${pdfError instanceof Error ? pdfError.message : "Unknown error"}`);
+      }
 
       // Generate embeddings
+      console.log("Generating embeddings...");
       const chunkTexts = chunks.map((chunk) => chunk.text);
-      const embeddings = await generateEmbeddings(chunkTexts, apiKey);
+      let embeddings: number[][];
+      try {
+        embeddings = await generateEmbeddings(chunkTexts, apiKey);
+        console.log(`Generated ${embeddings.length} embeddings`);
+        if (!embeddings || embeddings.length === 0) {
+          throw new Error("Failed to generate embeddings");
+        }
+      } catch (embedError) {
+        console.error("Embedding generation error:", embedError);
+        throw new Error(`Embedding generation failed: ${embedError instanceof Error ? embedError.message : "Unknown error"}`);
+      }
 
       // Store vectors in database
       // Note: We need to use raw SQL for pgvector
+      console.log("Storing vectors in database...");
+      let vectorsInserted = 0;
       for (let i = 0; i < chunks.length; i++) {
-        const embeddingString = `[${embeddings[i]?.join(",")}]`;
-        await db.$executeRaw`
-          INSERT INTO vectors (id, site_id, doc_id, chunk_text, embedding, metadata, created_at)
-          VALUES (
-            ${crypto.randomUUID()},
-            ${site.id},
-            ${document.id},
-            ${chunks[i]?.text ?? ""},
-            ${embeddingString}::vector,
-            ${JSON.stringify(chunks[i]?.metadata ?? {})}::jsonb,
-            NOW()
-          )
-        `;
+        if (!embeddings[i] || embeddings[i].length === 0) {
+          console.warn(`Skipping chunk ${i} - no embedding generated`);
+          continue;
+        }
+        
+        const embeddingString = `[${embeddings[i]!.join(",")}]`;
+        const chunkId = randomUUID();
+        // Escape SQL special characters (single quotes need to be doubled in SQL strings)
+        const rawChunkText = chunks[i]?.text ?? "";
+        const chunkText = rawChunkText
+          .replace(/'/g, "''")  // Escape single quotes for SQL
+          .replace(/\\/g, "\\\\") // Escape backslashes
+          .replace(/\0/g, "");    // Remove null bytes
+        const rawMetadata = JSON.stringify(chunks[i]?.metadata ?? {});
+        const metadataJson = rawMetadata.replace(/'/g, "''");
+        
+        try {
+          // Use $executeRawUnsafe with proper string escaping for pgvector
+          // We need raw SQL because Prisma doesn't natively support vector types
+          const chunkTextValue = chunkText.length > 0 ? `'${chunkText}'` : "''";
+          
+          // Build SQL statement - single line to avoid issues
+          const sql = `INSERT INTO vectors (id, site_id, doc_id, chunk_text, embedding, metadata, created_at) VALUES ('${chunkId}'::uuid, '${site.id}'::uuid, '${document.id}'::uuid, ${chunkTextValue}, '${embeddingString}'::vector, '${metadataJson}'::jsonb, NOW())`;
+          
+          console.log(`[Vector ${i + 1}/${chunks.length}] Attempting insert...`);
+          
+          // Check if method exists
+          if (typeof db.$executeRawUnsafe !== 'function') {
+            throw new Error('$executeRawUnsafe is not a function');
+          }
+          
+          // Execute raw SQL
+          const result = await db.$executeRawUnsafe(sql);
+          console.log(`[Vector ${i + 1}] Success, rows:`, result);
+          vectorsInserted++;
+        } catch (sqlError) {
+          console.error(`[Vector ${i + 1}] SQL Error:`, sqlError);
+          console.error("Error type:", typeof sqlError);
+          console.error("Error name:", sqlError?.constructor?.name);
+          if (sqlError instanceof Error) {
+            console.error("Error message:", sqlError.message);
+            console.error("Error stack:", sqlError.stack);
+          } else {
+            console.error("Error string:", String(sqlError));
+          }
+          console.error("Context:", {
+            chunkId,
+            siteId: site.id,
+            docId: document.id,
+            chunkTextLength: chunkText.length,
+            embeddingLength: embeddingString.length,
+            sqlLength: sql.length,
+            hasExecuteRawUnsafe: typeof db.$executeRawUnsafe,
+          });
+          // Continue with other chunks even if one fails
+        }
+      }
+      
+      if (vectorsInserted === 0 && chunks.length > 0) {
+        throw new Error("Failed to store any vectors in the database. Check if the vectors table and embedding column exist.");
       }
 
       // Update document status
@@ -143,30 +229,42 @@ export async function POST(request: NextRequest) {
         chunksProcessed: chunks.length,
       });
     } catch (error) {
-      // Update document status to error
-      await db.document.update({
-        where: { id: document.id },
-        data: {
-          status: "error",
-          errorMessage:
-            error instanceof Error ? error.message : "Unknown error",
-        },
-      });
+      console.error("Processing error:", error);
+      // Update document status to error (if document exists)
+      try {
+        await db.document.update({
+          where: { id: document.id },
+          data: {
+            status: "error",
+            errorMessage:
+              error instanceof Error ? error.message : "Unknown error",
+          },
+        });
+      } catch (updateError) {
+        console.error("Failed to update document status:", updateError);
+      }
 
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      console.error("Returning error response:", errorMessage);
+      
       return NextResponse.json(
         {
           error: "Processing failed",
-          message: error instanceof Error ? error.message : "Unknown error",
+          message: errorMessage,
         },
         { status: 500 },
       );
     }
   } catch (error) {
-    console.error("Upload error:", error);
+    console.error("Upload error (outer catch):", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    console.error("Error stack:", errorStack);
+    
     return NextResponse.json(
       {
         error: "Internal server error",
-        message: error instanceof Error ? error.message : "Unknown error",
+        message: errorMessage,
       },
       { status: 500 },
     );

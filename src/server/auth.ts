@@ -170,49 +170,63 @@ export async function getServerAuthSession(): Promise<Session | null> {
 /**
  * Get server session in API routes
  * Use this in API route handlers (route.ts files)
+ * Uses getToken which works better with API routes
  */
 export async function getServerAuthSessionFromRequest(
   req: NextRequest,
-  res?: NextResponse,
-) {
-  const headersList = req.headers;
-  const cookieHeader = headersList.get("cookie") || "";
-  
-  const reqObj = {
-    headers: {
-      ...Object.fromEntries(headersList.entries()),
-      cookie: cookieHeader,
-    },
-    cookies: Object.fromEntries(
-      cookieHeader.split("; ").map((c) => {
-        const [name, ...rest] = c.split("=");
-        return [name, rest.join("=")];
-      }).filter(([name]) => name)
-    ),
-  } as any;
+): Promise<Session | null> {
+  try {
+    const cookieHeader = req.headers.get("cookie") || "";
+    
+    // Get the session token from cookies
+    const sessionToken = cookieHeader
+      .split("; ")
+      .find((c) => c.startsWith("next-auth.session-token=") || c.startsWith("__Secure-next-auth.session-token="))
+      ?.split("=")[1];
 
-  // Create a proper mock response object with all required methods
-  const headersMap = new Map<string, string | string[]>();
-  const resObj = res || ({
-    getHeader: (name: string) => {
-      return headersMap.get(name.toLowerCase());
-    },
-    setHeader: (name: string, value: string | string[]) => {
-      headersMap.set(name.toLowerCase(), value);
-    },
-    removeHeader: (name: string) => {
-      headersMap.delete(name.toLowerCase());
-    },
-    hasHeader: (name: string) => {
-      return headersMap.has(name.toLowerCase());
-    },
-    getHeaders: () => {
-      return Object.fromEntries(headersMap);
-    },
-    end: () => {},
-    statusCode: 200,
-  } as any);
+    if (!sessionToken) {
+      return null;
+    }
 
-  return getServerSession({ req: reqObj, res: resObj } as any, authOptions);
+    // Decode and verify the JWT token
+    const token = await getToken({
+      req: {
+        headers: Object.fromEntries(req.headers.entries()),
+        cookies: Object.fromEntries(
+          cookieHeader.split("; ").map((c) => {
+            const [name, ...rest] = c.split("=");
+            return [name, rest.join("=")];
+          }).filter(([name]) => name)
+        ),
+      } as any,
+      secret: process.env.NEXTAUTH_SECRET,
+    });
+
+    if (!token || !token.email) {
+      return null;
+    }
+
+    // Get user from database
+    const user = await db.user.findUnique({
+      where: { email: token.email as string },
+    });
+
+    if (!user) {
+      return null;
+    }
+
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        image: user.image,
+      },
+      expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    } as Session;
+  } catch (error) {
+    console.error("Error getting server session from request:", error);
+    return null;
+  }
 }
 

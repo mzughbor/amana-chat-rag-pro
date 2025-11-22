@@ -50,15 +50,24 @@ export default function UploadContent({
         body: formData,
       });
 
+      // Check if response is JSON
+      const contentType = response.headers.get("content-type");
+      if (!contentType?.includes("application/json")) {
+        const text = await response.text();
+        console.error("Non-JSON response:", text);
+        throw new Error(`Server error: ${response.status} ${response.statusText}`);
+      }
+
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Upload failed");
+        throw new Error(data.error || data.message || "Upload failed");
       }
 
       // Reload page to show new document
       window.location.reload();
     } catch (error) {
+      console.error("Upload error:", error);
       setUploadError(
         error instanceof Error ? error.message : "Upload failed",
       );

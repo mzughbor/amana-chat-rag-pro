@@ -23,7 +23,7 @@ export default async function UploadPage() {
     orderBy: { createdAt: "desc" },
   });
 
-  const qaPairs = await db.qaPair.findMany({
+  const qaPairs = await db.qAPair.findMany({
     where: { siteId: site.id },
     orderBy: { createdAt: "desc" },
   });

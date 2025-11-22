@@ -15,12 +15,23 @@ export default async function DashboardPage() {
     where: { userId: session.user.id },
   });
 
-  // Get stats
-  const [docCount, qaCount, convCount] = await Promise.all([
-    db.document.count({ where: { siteId: site?.id ?? "" } }),
-    db.qaPair.count({ where: { siteId: site?.id ?? "" } }),
-    db.conversation.count({ where: { siteId: site?.id ?? "" } }),
-  ]);
+  // Get stats (only if site exists)
+  let docCount = 0;
+  let qaCount = 0;
+  let convCount = 0;
+
+  if (site) {
+    try {
+      [docCount, qaCount, convCount] = await Promise.all([
+        db.document.count({ where: { siteId: site.id } }).catch(() => 0),
+        db.qAPair.count({ where: { siteId: site.id } }).catch(() => 0),
+        db.conversation.count({ where: { siteId: site.id } }).catch(() => 0),
+      ]);
+    } catch (error) {
+      console.error("Error fetching stats:", error);
+      // Use default values of 0 if there's an error
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
