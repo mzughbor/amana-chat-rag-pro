@@ -88,11 +88,12 @@ export async function POST(request: NextRequest) {
     });
 
     try {
-      // Upload to Supabase Storage
+      // Upload to Supabase Storage (optional - document processing will continue if this fails)
       const filePath = `${site.id}/${document.id}/${file.name}`;
+      let storageSuccess = false;
       
-      // Check if bucket exists, create if not (this might fail if no permissions)
       try {
+        console.log("Uploading file to Supabase storage...");
         const { data: uploadData, error: uploadError } =
           await supabaseAdmin.storage
             .from("documents")
@@ -102,14 +103,20 @@ export async function POST(request: NextRequest) {
             });
 
         if (uploadError) {
-          // If bucket doesn't exist, try to create it (might fail without proper permissions)
           if (uploadError.message.includes("Bucket not found") || uploadError.message.includes("not found")) {
-            console.warn("Documents bucket not found. Please create it in Supabase Dashboard → Storage");
-            // Continue without storage - we'll still process the document
+            console.warn("Documents bucket not found. Please create 'documents' bucket in Supabase Dashboard → Storage");
+          } else if (uploadError.message.includes("The resource already exists")) {
+            console.warn("File already exists in storage, continuing with processing");
+            storageSuccess = true;
           } else {
-            throw new Error(`Storage upload failed: ${uploadError.message}`);
+            console.warn(`Storage upload failed: ${uploadError.message}`);
           }
         } else if (uploadData) {
+          console.log("File uploaded to storage successfully");
+          storageSuccess = true;
+        }
+
+        if (storageSuccess) {
           // Update document with storage path only if upload succeeded
           await db.document.update({
             where: { id: document.id },
@@ -118,98 +125,192 @@ export async function POST(request: NextRequest) {
         }
       } catch (storageError) {
         console.warn("Storage upload failed, continuing without storage:", storageError);
-        // Continue processing even if storage fails
+        // Continue processing even if storage fails - this is not critical
       }
 
       // Process PDF: extract text and chunk
-      console.log("Processing PDF...");
+      console.log(`Processing PDF: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
       let chunks: Array<{ text: string; metadata: any }>;
+      
       try {
+        console.log('Initializing PDF processing...');
         chunks = await processPDF(buffer, file.name);
         console.log(`PDF processed into ${chunks.length} chunks`);
+        
         if (!chunks || chunks.length === 0) {
-          throw new Error("No text could be extracted from the PDF");
+          throw new Error("No text could be extracted from the PDF. The file might be empty, corrupted, or contain only images.");
         }
+
+        // Validate chunk content
+        const validChunks = chunks.filter(chunk => chunk.text && chunk.text.trim().length > 0);
+        if (validChunks.length === 0) {
+          throw new Error("All extracted chunks are empty. The PDF might contain only images or unreadable text.");
+        }
+
+        if (validChunks.length < chunks.length) {
+          console.warn(`Filtered out ${chunks.length - validChunks.length} empty chunks`);
+          chunks = validChunks;
+        }
+
+        // Check total text length
+        const totalTextLength = chunks.reduce((sum, chunk) => sum + chunk.text.length, 0);
+        console.log(`Total extracted text: ${totalTextLength} characters`);
+        
+        if (totalTextLength < 100) {
+          console.warn("Very little text extracted from PDF. This might affect the quality of the RAG system.");
+        }
+        
+        // Additional validation: Check for extremely large chunks that might cause issues
+        const oversizedChunks = chunks.filter(chunk => chunk.text.length > 5000);
+        if (oversizedChunks.length > 0) {
+          console.warn(`Found ${oversizedChunks.length} chunks with more than 5000 characters. This might affect performance.`);
+        }
+
       } catch (pdfError) {
         console.error("PDF processing error:", pdfError);
-        throw new Error(`PDF processing failed: ${pdfError instanceof Error ? pdfError.message : "Unknown error"}`);
+        const errorMessage = pdfError instanceof Error ? pdfError.message : "Unable to process PDF file";
+        // Log additional context for debugging
+        console.error("PDF processing context:", {
+          fileName: file.name,
+          fileSize: file.size,
+          fileType: file.type,
+          bufferLength: buffer.length,
+        });
+        throw new Error(`PDF processing failed: ${errorMessage}`);
       }
 
       // Generate embeddings
-      console.log("Generating embeddings...");
-      const chunkTexts = chunks.map((chunk) => chunk.text);
+      console.log("Generating embeddings for chunks...");
+      const chunkTexts = chunks.map((chunk) => chunk.text.trim());
       let embeddings: number[][];
+      
       try {
+        // Validate API key format
+        if (!apiKey || apiKey.length < 10) {
+          throw new Error("Invalid OpenAI API key format");
+        }
+
+        // Validate chunk texts before sending to OpenAI
+        if (chunkTexts.some(text => !text || text.length === 0)) {
+          throw new Error("Some chunks contain empty text. This should have been filtered out earlier.");
+        }
+        
+        // Check for extremely long texts that might exceed token limits
+        const longTexts = chunkTexts.filter(text => text.length > 10000);
+        if (longTexts.length > 0) {
+          console.warn(`Found ${longTexts.length} chunks with more than 10000 characters. This might exceed token limits.`);
+        }
+
         embeddings = await generateEmbeddings(chunkTexts, apiKey);
         console.log(`Generated ${embeddings.length} embeddings`);
+        
         if (!embeddings || embeddings.length === 0) {
-          throw new Error("Failed to generate embeddings");
+          throw new Error("No embeddings were generated");
         }
+
+        if (embeddings.length !== chunks.length) {
+          throw new Error(`Embedding count mismatch: expected ${chunks.length}, got ${embeddings.length}`);
+        }
+
+        // Validate embedding dimensions
+        const expectedDimensions = 1536; // text-embedding-3-small
+        for (let i = 0; i < embeddings.length; i++) {
+          if (!embeddings[i] || embeddings[i].length !== expectedDimensions) {
+            throw new Error(`Invalid embedding dimensions at index ${i}: expected ${expectedDimensions}, got ${embeddings[i]?.length || 0}`);
+          }
+        }
+
       } catch (embedError) {
         console.error("Embedding generation error:", embedError);
-        throw new Error(`Embedding generation failed: ${embedError instanceof Error ? embedError.message : "Unknown error"}`);
+        if (embedError instanceof Error && embedError.message.includes("API key")) {
+          throw new Error("OpenAI API key is invalid or has insufficient credits. Please check your API key.");
+        } else if (embedError instanceof Error && embedError.message.includes("400")) {
+          throw new Error("Bad request to OpenAI API. This might be due to invalid input or exceeding token limits.");
+        } else if (embedError instanceof Error && embedError.message.includes("429")) {
+          throw new Error("Rate limit exceeded for OpenAI API. Please try again later or check your plan limits.");
+        } else if (embedError instanceof Error && embedError.message.includes("500")) {
+          throw new Error("OpenAI API server error. Please try again later.");
+        }
+        throw new Error(`Embedding generation failed: ${embedError instanceof Error ? embedError.message : "Unknown embedding error"}`);
       }
 
-      // Store vectors in database
-      // Note: We need to use raw SQL for pgvector
+      // Store vectors in database using safe parameterized queries
       console.log("Storing vectors in database...");
       let vectorsInserted = 0;
+      
       for (let i = 0; i < chunks.length; i++) {
         if (!embeddings[i] || embeddings[i].length === 0) {
           console.warn(`Skipping chunk ${i} - no embedding generated`);
           continue;
         }
         
-        const embeddingString = `[${embeddings[i]!.join(",")}]`;
+        const embedding = embeddings[i]!;
         const chunkId = randomUUID();
-        // Escape SQL special characters (single quotes need to be doubled in SQL strings)
-        const rawChunkText = chunks[i]?.text ?? "";
-        const chunkText = rawChunkText
-          .replace(/'/g, "''")  // Escape single quotes for SQL
-          .replace(/\\/g, "\\\\") // Escape backslashes
-          .replace(/\0/g, "");    // Remove null bytes
-        const rawMetadata = JSON.stringify(chunks[i]?.metadata ?? {});
-        const metadataJson = rawMetadata.replace(/'/g, "''");
+        const chunkText = chunks[i]?.text ?? "";
+        const metadata = chunks[i]?.metadata ?? {};
         
         try {
-          // Use $executeRawUnsafe with proper string escaping for pgvector
-          // We need raw SQL because Prisma doesn't natively support vector types
-          const chunkTextValue = chunkText.length > 0 ? `'${chunkText}'` : "''";
+          console.log(`[Vector ${i + 1}/${chunks.length}] Inserting chunk...`);
           
-          // Build SQL statement - single line to avoid issues
-          const sql = `INSERT INTO vectors (id, site_id, doc_id, chunk_text, embedding, metadata, created_at) VALUES ('${chunkId}'::uuid, '${site.id}'::uuid, '${document.id}'::uuid, ${chunkTextValue}, '${embeddingString}'::vector, '${metadataJson}'::jsonb, NOW())`;
+          // Use parameterized query for pgvector compatibility and security
+          const embeddingVector = `[${embedding.join(",")}]`;
+          const metadataJson = JSON.stringify(metadata);
           
-          console.log(`[Vector ${i + 1}/${chunks.length}] Attempting insert...`);
-          
-          // Check if method exists
-          if (typeof db.$executeRawUnsafe !== 'function') {
-            throw new Error('$executeRawUnsafe is not a function');
+          // Validate that the embedding has the correct dimensions before inserting
+          if (embedding.length !== 1536) {
+            throw new Error(`Invalid embedding dimensions: expected 1536, got ${embedding.length}`);
           }
           
-          // Execute raw SQL
-          const result = await db.$executeRawUnsafe(sql);
-          console.log(`[Vector ${i + 1}] Success, rows:`, result);
+          await db.$executeRaw`
+            INSERT INTO vectors (id, "siteId", "docId", "chunkText", embedding, metadata, "createdAt")
+            VALUES (
+              ${chunkId},
+              ${site.id},
+              ${document.id},
+              ${chunkText},
+              ${embeddingVector}::vector,
+              ${metadataJson}::jsonb,
+              NOW()
+            )
+          `;
+          
+          console.log(`[Vector ${i + 1}] Success`);
           vectorsInserted++;
         } catch (sqlError) {
-          console.error(`[Vector ${i + 1}] SQL Error:`, sqlError);
-          console.error("Error type:", typeof sqlError);
-          console.error("Error name:", sqlError?.constructor?.name);
+          console.error(`[Vector ${i + 1}] Database error:`, sqlError);
+          
+          // Check for specific error types
           if (sqlError instanceof Error) {
-            console.error("Error message:", sqlError.message);
-            console.error("Error stack:", sqlError.stack);
-          } else {
-            console.error("Error string:", String(sqlError));
+            if (sqlError.message.includes('column "embedding" does not exist')) {
+              throw new Error("Database setup incomplete: The 'embedding' column is missing from the vectors table. Please run the setup SQL from SETUP.md");
+            } else if (sqlError.message.includes('relation "vectors" does not exist')) {
+              throw new Error("Database setup incomplete: The 'vectors' table does not exist. Please run 'npm run db:push' first");
+            } else if (sqlError.message.includes('type "vector" does not exist')) {
+              throw new Error("Database setup incomplete: pgvector extension is not enabled. Please run 'CREATE EXTENSION vector;' in your database");
+            } else if (sqlError.message.includes('invalid input syntax for type vector')) {
+              throw new Error("Invalid vector data format. This may indicate an issue with the embedding generation or data formatting.");
+            } else if (sqlError.message.includes('column "site_id" does not exist') || sqlError.message.includes('column "doc_id" does not exist') || sqlError.message.includes('column "chunk_text" does not exist') || sqlError.message.includes('column "created_at" does not exist')) {
+              throw new Error("Database schema mismatch: Column names don't match expected schema. Please check your database schema and ensure it matches the Prisma schema.");
+            }
           }
-          console.error("Context:", {
+          
+          // For other errors, log details and continue
+          console.error("Chunk processing context:", {
+            chunkIndex: i,
             chunkId,
             siteId: site.id,
             docId: document.id,
             chunkTextLength: chunkText.length,
-            embeddingLength: embeddingString.length,
-            sqlLength: sql.length,
-            hasExecuteRawUnsafe: typeof db.$executeRawUnsafe,
+            embeddingDimensions: embedding.length,
           });
-          // Continue with other chunks even if one fails
+          
+          // If it's the first few chunks and they're all failing, abort
+          if (i < 3 && vectorsInserted === 0) {
+            throw new Error(`Database insertion failed: ${sqlError instanceof Error ? sqlError.message : 'Unknown database error'}`);
+          }
+          
+          // Otherwise, continue with remaining chunks
+          console.warn(`Continuing with remaining chunks...`);
         }
       }
       

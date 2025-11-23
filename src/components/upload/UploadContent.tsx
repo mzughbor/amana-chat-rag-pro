@@ -29,6 +29,7 @@ export default function UploadContent({
 }) {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
+  const [uploadProgress, setUploadProgress] = useState("");
   const [showQAForm, setShowQAForm] = useState(false);
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
@@ -38,41 +39,88 @@ export default function UploadContent({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Validate file type on frontend
+    if (file.type !== "application/pdf") {
+      setUploadError("Only PDF files are allowed");
+      return;
+    }
+
+    // Validate file size (10MB limit)
+    const MAX_SIZE = 10 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      setUploadError("File size must be less than 10MB");
+      return;
+    }
+
     setUploading(true);
     setUploadError("");
+    setUploadProgress("Uploading file...");
 
     const formData = new FormData();
     formData.append("file", file);
 
     try {
+      setUploadProgress("Processing document...");
       const response = await fetch("/api/content/upload", {
         method: "POST",
         body: formData,
+        // Add timeout to prevent hanging
+        signal: AbortSignal.timeout(120000), // 2 minutes timeout
       });
 
-      // Check if response is JSON
+      // Handle response based on content type
       const contentType = response.headers.get("content-type");
+      
+      if (!response.ok) {
+        // Handle error responses
+        if (contentType?.includes("application/json")) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || errorData.message || `Server error: ${response.status}`);
+        } else {
+          // Non-JSON error response (likely HTML error page)
+          const text = await response.text();
+          console.error("Server error response:", text.substring(0, 500));
+          throw new Error(`Server error: ${response.status} - Please check the server logs for details`);
+        }
+      }
+
+      // Success response - should be JSON
       if (!contentType?.includes("application/json")) {
         const text = await response.text();
-        console.error("Non-JSON response:", text);
-        throw new Error(`Server error: ${response.status} ${response.statusText}`);
+        console.error("Unexpected non-JSON success response:", text);
+        throw new Error("Unexpected server response format");
       }
 
       const data = await response.json();
 
-      if (!response.ok) {
-        throw new Error(data.error || data.message || "Upload failed");
-      }
-
-      // Reload page to show new document
+      // Success - show success message and reload
+      setUploadProgress("Successfully processed!");
+      setUploadError("");
+      alert(`Successfully processed ${data.chunksProcessed || 0} chunks from the document!`);
       window.location.reload();
     } catch (error) {
       console.error("Upload error:", error);
-      setUploadError(
-        error instanceof Error ? error.message : "Upload failed",
-      );
+      setUploadProgress("");
+      if (error instanceof Error && error.name === 'TimeoutError') {
+        setUploadError("Upload timeout - file may be too large or processing is taking too long");
+      } else if (error instanceof Error && error.message.includes('PDF processing failed')) {
+        setUploadError(`PDF processing failed. This may be due to: 
+        - The PDF contains only images (not text)
+        - The PDF is password protected
+        - The PDF is corrupted
+        - The PDF is too large
+        
+        Please try a different PDF file.`);
+      } else {
+        setUploadError(
+          error instanceof Error ? error.message : "Upload failed - please try again",
+        );
+      }
     } finally {
       setUploading(false);
+      setUploadProgress("");
+      // Reset file input
+      e.target.value = "";
     }
   };
 
@@ -155,12 +203,30 @@ export default function UploadContent({
             </div>
 
             {uploading && (
-              <p className="mt-2 text-sm text-gray-600">Uploading and processing...</p>
+              <div className="mt-2 space-y-2">
+                <div className="flex items-center space-x-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                  <p className="text-sm text-gray-600">{uploadProgress || "Processing..."}</p>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div className="bg-primary h-2 rounded-full animate-pulse" style={{width: "100%"}}></div>
+                </div>
+                <p className="text-xs text-gray-500">This may take a few minutes for large documents</p>
+              </div>
             )}
 
             {uploadError && (
               <div className="mt-2 rounded-md bg-red-50 p-3">
-                <p className="text-sm text-red-800">{uploadError}</p>
+                <div className="flex items-start">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm text-red-800">{uploadError}</p>
+                  </div>
+                </div>
               </div>
             )}
           </div>

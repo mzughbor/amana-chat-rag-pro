@@ -66,9 +66,9 @@ export async function POST(request: NextRequest) {
     const questionEmbedding = await generateEmbeddings([question], apiKey);
     const embeddingString = `[${questionEmbedding[0]?.join(",")}]`;
 
-    // Store as vector for retrieval
+    // Store as vector for retrieval using parameterized query
     await db.$executeRaw`
-      INSERT INTO vectors (id, site_id, doc_id, chunk_text, embedding, metadata, created_at)
+      INSERT INTO vectors (id, "siteId", "docId", "chunkText", embedding, metadata, "createdAt")
       VALUES (
         ${crypto.randomUUID()},
         ${site.id},
