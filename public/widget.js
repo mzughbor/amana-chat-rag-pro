@@ -1,4 +1,4 @@
-(function() {
+(function () {
   'use strict';
 
   // Get siteId from query parameter
@@ -36,22 +36,22 @@
     transition: transform 0.2s, box-shadow 0.2s;
   `;
 
-  widgetButton.addEventListener('mouseenter', function() {
+  widgetButton.addEventListener('mouseenter', function () {
     this.style.transform = 'scale(1.1)';
     this.style.boxShadow = '0 6px 16px rgba(0, 0, 0, 0.2)';
   });
 
-  widgetButton.addEventListener('mouseleave', function() {
+  widgetButton.addEventListener('mouseleave', function () {
     this.style.transform = 'scale(1)';
     this.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
   });
 
   // Create iframe for chat
   let chatIframe = null;
-  // Fix: Use the correct route parameter (botId in new structure)
-  const chatUrl = `${window.location.protocol}//${window.location.host}/chat/${siteId}`;
+  // Use the widget-specific chat route
+  const chatUrl = `http://localhost:3002/widget/chat/${siteId}`;
 
-  widgetButton.addEventListener('click', function() {
+  widgetButton.addEventListener('click', function () {
     if (chatIframe) {
       // Toggle iframe visibility
       chatIframe.style.display = chatIframe.style.display === 'none' ? 'block' : 'none';
@@ -77,6 +77,13 @@
     `;
 
     document.body.appendChild(chatIframe);
+
+    // Listen for close message from iframe
+    window.addEventListener('message', function (event) {
+      if (event.data.type === 'CLOSE_WIDGET') {
+        chatIframe.style.display = 'none';
+      }
+    });
   });
 
   // Append button to body
@@ -110,4 +117,3 @@
   window.addEventListener('resize', adjustForMobile);
   adjustForMobile();
 })();
-

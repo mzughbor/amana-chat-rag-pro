@@ -13,6 +13,12 @@ export default withAuth(
 );
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/upload/:path*", "/api-key/:path*", "/logs/:path*", "/widget/:path*"],
+  matcher: [
+    "/dashboard/:path*", 
+    "/upload/:path*", 
+    "/api-key/:path*", 
+    "/logs/:path*",
+    // Protect widget setup but not widget chat
+    "/widget/setup/:path*"
+  ],
 };
-
