@@ -8,10 +8,11 @@ import Button from "~/components/ui/Button";
 export default function WidgetSetup({ siteId }: { siteId: string }) {
   const [copied, setCopied] = useState(false);
 
+  // Use a consistent approach for the widget script URL
   const widgetScript = `<script>
   (function() {
     var script = document.createElement('script');
-    script.src = '${typeof window !== "undefined" ? window.location.origin : ""}/widget.js?siteId=${siteId}';
+    script.src = '/widget.js?siteId=${siteId}';
     script.async = true;
     document.head.appendChild(script);
   })();
