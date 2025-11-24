@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Card from "~/components/ui/Card";
+import Button from "~/components/ui/Button";
 
 export default function WidgetSetup({ siteId }: { siteId: string }) {
   const [copied, setCopied] = useState(false);
@@ -22,47 +24,42 @@ export default function WidgetSetup({ siteId }: { siteId: string }) {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="bg-white shadow">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex h-16 items-center justify-between">
-            <Link href="/dashboard" className="text-xl font-semibold text-gray-900">
-              AmanaRAG
-            </Link>
-            <Link
-              href="/dashboard"
-              className="text-sm text-primary hover:text-primary/80"
-            >
-              Back to Dashboard
-            </Link>
-          </div>
+    <div className="mx-auto max-w-[1200px] px-6 md:px-8 py-8">
+        <div className="mb-8 animate-fade-in">
+          <h1 className="text-4xl font-bold text-gray-900 mb-2">Widget Setup</h1>
+          <p className="text-lg text-gray-600">
+            Copy and paste this script into your website to enable the chatbot
+          </p>
         </div>
-      </div>
 
-      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
-        <h1 className="text-2xl font-bold text-gray-900">Widget Setup</h1>
-        <p className="mt-1 text-sm text-gray-600">
-          Copy and paste this script into your website to enable the chatbot
-        </p>
-
-        <div className="mt-8 rounded-lg bg-white p-6 shadow">
+        <Card className="animate-fade-in">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">
+            <h2 className="text-xl font-semibold text-gray-900">
               Embed Script
             </h2>
-            <button
+            <Button
               onClick={copyToClipboard}
-              className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90"
+              variant="primary"
+              size="md"
             >
-              {copied ? "Copied!" : "Copy Script"}
-            </button>
+              {copied ? (
+                <span className="flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Copied!
+                </span>
+              ) : (
+                'Copy Script'
+              )}
+            </Button>
           </div>
 
           <pre className="overflow-x-auto rounded-md bg-gray-900 p-4 text-sm text-gray-100">
             <code>{widgetScript}</code>
           </pre>
 
-          <div className="mt-6 rounded-md bg-blue-50 p-4">
+          <div className="mt-6 rounded-lg bg-blue-50 border border-blue-200 p-4">
             <h3 className="text-sm font-medium text-blue-900">
               Installation Instructions
             </h3>
@@ -73,9 +70,10 @@ export default function WidgetSetup({ siteId }: { siteId: string }) {
               <li>Visitors can click it to start chatting</li>
             </ol>
           </div>
-        </div>
+        </Card>
 
-        <div className="mt-8 rounded-lg bg-white p-6 shadow">
+        <div style={{ animationDelay: '0.1s' }}>
+          <Card className="mt-8 animate-fade-in">
           <h2 className="text-lg font-semibold text-gray-900">Preview</h2>
           <p className="mt-2 text-sm text-gray-600">
             The widget will appear as a chat button in the bottom-right corner
@@ -101,8 +99,8 @@ export default function WidgetSetup({ siteId }: { siteId: string }) {
               <p className="mt-2 text-sm text-gray-500">Chat Widget Preview</p>
             </div>
           </div>
+        </Card>
         </div>
-      </div>
     </div>
   );
 }
