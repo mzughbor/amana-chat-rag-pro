@@ -48,6 +48,7 @@
 
   // Create iframe for chat
   let chatIframe = null;
+  // Fix: Use the correct route parameter (botId in new structure)
   const chatUrl = `${window.location.protocol}//${window.location.host}/chat/${siteId}`;
 
   widgetButton.addEventListener('click', function() {

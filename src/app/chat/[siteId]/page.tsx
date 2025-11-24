@@ -14,7 +14,7 @@ interface Message {
 export default function ChatPage() {
   const params = useParams();
   const router = useRouter();
-  const botId = params.botId as string;
+  const siteId = params.siteId as string;
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -39,16 +39,41 @@ export default function ChatPage() {
     setInput("");
     setLoading(true);
 
-    // Simulate API call with placeholder response
-    setTimeout(() => {
+    try {
+      const response = await fetch(`/api/chat/${siteId}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: currentInput,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
       const assistantMessage: Message = {
         role: "assistant",
-        content: "Hello, I'm your bot!",
+        content: data.response,
         timestamp: new Date(),
       };
+      
       setMessages((prev) => [...prev, assistantMessage]);
+    } catch (error) {
+      console.error("Error sending message:", error);
+      const errorMessage: Message = {
+        role: "assistant",
+        content: "Sorry, I encountered an error. Please try again.",
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
       setLoading(false);
-    }, 500);
+    }
   };
 
   const quickReplies = [
@@ -65,10 +90,13 @@ export default function ChatPage() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-xl font-bold text-white">Chat Assistant</h1>
-              <p className="text-xs text-white/80 mt-0.5">Bot ID: {botId}</p>
+              <p className="text-xs text-white/80 mt-0.5">Site ID: {siteId}</p>
             </div>
             <Link href="/dashboard">
-              <button className="p-2 rounded-lg hover:bg-white/10 transition-colors">
+              <button 
+                className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+                title="Close chat"
+              >
                 <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
