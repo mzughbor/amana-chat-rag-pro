@@ -92,3 +92,10 @@ lerna-debug.log*
 *.tsbuildinfo
 .eslintcache
 
+# Documentation files (keep only README.md)
+*.md
+!README.md
+
+# Clean cache folder
+/clean/
+

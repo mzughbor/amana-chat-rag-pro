@@ -20,25 +20,25 @@ export async function retrieveContext(
 
   // Perform cosine similarity search using raw SQL (pgvector)
   // Note: Prisma doesn't support pgvector directly, so we use raw SQL
-  // Using $queryRawUnsafe with proper escaping for the vector
-  const results = await db.$queryRawUnsafe<
+  // Using $queryRaw with parameterized query to prevent SQL injection
+  const results = await db.$queryRaw<
     Array<{
       id: string;
       chunk_text: string;
       metadata: any;
       similarity: number;
     }>
-  >(
-    `SELECT 
+  >`
+    SELECT 
       id,
       chunk_text,
       metadata,
-      1 - (embedding <=> '${embeddingString}'::vector) as similarity
+      1 - (embedding <=> ${embeddingString}::vector) as similarity
     FROM vectors
-    WHERE site_id = '${siteId}'
-    ORDER BY embedding <=> '${embeddingString}'::vector
-    LIMIT ${k}`,
-  );
+    WHERE site_id = ${siteId}::uuid
+    ORDER BY embedding <=> ${embeddingString}::vector
+    LIMIT ${k}
+  `;
 
   return results.map((r) => ({
     text: r.chunk_text,

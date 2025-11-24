@@ -4,10 +4,12 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "~/lib/supabase";
+import Button from "~/components/ui/Button";
+import Input from "~/components/ui/Input";
+import Card from "~/components/ui/Card";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -22,25 +24,13 @@ export default function RegisterPage() {
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
-        options: {
-          data: {
-            name,
-          },
-        },
       });
 
       if (signUpError) {
         setError(signUpError.message);
       } else if (data.user) {
-        // Check if email confirmation is required
-        if (data.user.email_confirmed_at === null) {
-          setError("Account created! Please check your email to verify your account before signing in.");
-          setTimeout(() => {
-            router.push("/login?registered=true&verify=true");
-          }, 3000);
-        } else {
-          router.push("/login?registered=true");
-        }
+        // Redirect to dashboard on success
+        router.push("/dashboard");
       }
     } catch (err) {
       setError("An error occurred. Please try again.");
@@ -50,89 +40,91 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12 sm:px-6 lg:px-8">
-      <div className="w-full max-w-md space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-bold tracking-tight text-gray-900">
-            Create your account
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Or{" "}
-            <Link
-              href="/login"
-              className="font-medium text-primary hover:text-primary/80"
-            >
-              sign in to your existing account
-            </Link>
-          </p>
-        </div>
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          {error && (
-            <div className="rounded-md bg-red-50 p-4">
-              <p className="text-sm text-red-800">{error}</p>
-            </div>
-          )}
-          <div className="-space-y-px rounded-md shadow-sm">
-            <div>
-              <label htmlFor="name" className="sr-only">
-                Name
-              </label>
-              <input
-                id="name"
-                name="name"
-                type="text"
-                required
-                className="relative block w-full rounded-t-md border-0 px-3 py-2 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:z-10 focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6"
-                placeholder="Full name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            </div>
-            <div>
-              <label htmlFor="email" className="sr-only">
-                Email address
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                className="relative block w-full border-0 px-3 py-2 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:z-10 focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6"
-                placeholder="Email address"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-            <div>
-              <label htmlFor="password" className="sr-only">
-                Password
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="new-password"
-                required
-                minLength={6}
-                className="relative block w-full rounded-b-md border-0 px-3 py-2 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:z-10 focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6"
-                placeholder="Password (min. 6 characters)"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
+    <div className="mx-auto max-w-[1200px] px-6 md:px-8 py-12">
+      <div className="flex min-h-[calc(100vh-300px)] items-center justify-center">
+        <div className="w-full max-w-md space-y-8 animate-fade-in">
+        <Card className="p-8">
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+              Create your account
+            </h1>
+            <p className="text-gray-600">
+              Get started with AmanaRAG today
+            </p>
           </div>
 
-          <div>
-            <button
+          <form className="space-y-6" onSubmit={handleSubmit}>
+            {error && (
+              <div className="rounded-lg bg-red-50 border border-red-200 p-4">
+                <div className="flex items-start gap-3">
+                  <svg className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p className="text-sm text-red-800">{error}</p>
+                </div>
+              </div>
+            )}
+
+            <Input
+              label="Email address"
+              id="email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              required
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+
+            <Input
+              label="Password"
+              id="password"
+              name="password"
+              type="password"
+              autoComplete="new-password"
+              required
+              minLength={6}
+              placeholder="At least 6 characters"
+              helperText="Password must be at least 6 characters long"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+
+            <Button
               type="submit"
+              variant="primary"
+              size="lg"
               disabled={loading}
-              className="group relative flex w-full justify-center rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50"
+              className="w-full"
             >
-              {loading ? "Creating account..." : "Create account"}
-            </button>
+              {loading ? (
+                <span className="flex items-center gap-2">
+                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Creating account...
+                </span>
+              ) : (
+                'Create account'
+              )}
+            </Button>
+          </form>
+
+          <div className="mt-6 text-center">
+            <p className="text-sm text-gray-600">
+              Already have an account?{" "}
+              <Link
+                href="/login"
+                className="font-medium text-primary hover:text-primary/80 transition-colors"
+              >
+                Sign in
+              </Link>
+            </p>
           </div>
-        </form>
+        </Card>
+        </div>
       </div>
     </div>
   );

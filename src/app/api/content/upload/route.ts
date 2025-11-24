@@ -162,33 +162,29 @@ export async function POST(request: NextRequest) {
         
         const embeddingString = `[${embeddings[i]!.join(",")}]`;
         const chunkId = randomUUID();
-        // Escape SQL special characters (single quotes need to be doubled in SQL strings)
-        const rawChunkText = chunks[i]?.text ?? "";
-        const chunkText = rawChunkText
-          .replace(/'/g, "''")  // Escape single quotes for SQL
-          .replace(/\\/g, "\\\\") // Escape backslashes
-          .replace(/\0/g, "");    // Remove null bytes
-        const rawMetadata = JSON.stringify(chunks[i]?.metadata ?? {});
-        const metadataJson = rawMetadata.replace(/'/g, "''");
+        const chunkText = chunks[i]?.text ?? "";
+        const metadataJson = JSON.stringify(chunks[i]?.metadata ?? {});
         
         try {
-          // Use $executeRawUnsafe with proper string escaping for pgvector
+          // Use $executeRaw with parameterized query to prevent SQL injection
           // We need raw SQL because Prisma doesn't natively support vector types
-          const chunkTextValue = chunkText.length > 0 ? `'${chunkText}'` : "''";
-          
-          // Build SQL statement - single line to avoid issues
-          const sql = `INSERT INTO vectors (id, site_id, doc_id, chunk_text, embedding, metadata, created_at) VALUES ('${chunkId}'::uuid, '${site.id}'::uuid, '${document.id}'::uuid, ${chunkTextValue}, '${embeddingString}'::vector, '${metadataJson}'::jsonb, NOW())`;
-          
+          // But we use parameterized queries for security
           console.log(`[Vector ${i + 1}/${chunks.length}] Attempting insert...`);
           
-          // Check if method exists
-          if (typeof db.$executeRawUnsafe !== 'function') {
-            throw new Error('$executeRawUnsafe is not a function');
-          }
+          await db.$executeRaw`
+            INSERT INTO vectors (id, site_id, doc_id, chunk_text, embedding, metadata, created_at)
+            VALUES (
+              ${chunkId}::uuid,
+              ${site.id}::uuid,
+              ${document.id}::uuid,
+              ${chunkText},
+              ${embeddingString}::vector,
+              ${metadataJson}::jsonb,
+              NOW()
+            )
+          `;
           
-          // Execute raw SQL
-          const result = await db.$executeRawUnsafe(sql);
-          console.log(`[Vector ${i + 1}] Success, rows:`, result);
+          console.log(`[Vector ${i + 1}] Success`);
           vectorsInserted++;
         } catch (sqlError) {
           console.error(`[Vector ${i + 1}] SQL Error:`, sqlError);
@@ -206,7 +202,6 @@ export async function POST(request: NextRequest) {
             docId: document.id,
             chunkTextLength: chunkText.length,
             embeddingLength: embeddingString.length,
-            sqlLength: sql.length,
             hasExecuteRawUnsafe: typeof db.$executeRawUnsafe,
           });
           // Continue with other chunks even if one fails
