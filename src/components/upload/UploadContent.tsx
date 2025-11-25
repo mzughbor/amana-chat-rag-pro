@@ -234,20 +234,35 @@ export default function UploadContent({
           {/* Q&A Form */}
           <div className="rounded-lg bg-white p-6 shadow">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-900">
-                Add Q&A Pair
-              </h2>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">
+                  Add Q&A Pair
+                </h2>
+                <p className="mt-1 text-sm text-gray-600">
+                  Manually add question and answer pairs for your chatbot.
+                </p>
+              </div>
               <button
                 onClick={() => setShowQAForm(!showQAForm)}
-                className="text-sm text-primary hover:text-primary/80"
+                className="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md bg-purple-600 hover:bg-purple-700 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
               >
-                {showQAForm ? "Cancel" : "Add New"}
+                {showQAForm ? (
+                  <>
+                    <svg className="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    Cancel
+                  </>
+                ) : (
+                  <>
+                    <svg className="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                    Add New
+                  </>
+                )}
               </button>
             </div>
-            <p className="mt-2 text-sm text-gray-600">
-              Manually add question and answer pairs for your chatbot.
-            </p>
-
             {showQAForm && (
               <form onSubmit={handleQASubmit} className="mt-4 space-y-4">
                 <div>
@@ -281,9 +296,19 @@ export default function UploadContent({
                 <button
                   type="submit"
                   disabled={qaSubmitting}
-                  className="w-full rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-50"
+                  className="w-full inline-flex items-center justify-center rounded-md bg-purple-600 px-4 py-2 text-sm font-semibold text-white hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 transition-colors"
                 >
-                  {qaSubmitting ? "Adding..." : "Add Q&A Pair"}
+                  {qaSubmitting ? (
+                    <>
+                      <svg className="mr-2 h-4 w-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Adding...
+                    </>
+                  ) : (
+                    "Add Q&A Pair"
+                  )}
                 </button>
               </form>
             )}
@@ -353,18 +378,36 @@ export default function UploadContent({
 
         {/* Q&A Pairs List */}
         <div className="mt-8">
-          <h2 className="text-lg font-semibold text-gray-900">Q&A Pairs</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">Q&A Pairs</h2>
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+              {qaPairs.length}
+            </span>
+          </div>
           <div className="mt-4 space-y-4">
             {qaPairs.map((qa) => (
-              <div key={qa.id} className="rounded-lg bg-white p-4 shadow">
-                <p className="font-medium text-gray-900">Q: {qa.question}</p>
-                <p className="mt-2 text-sm text-gray-600">A: {qa.answer}</p>
+              <div key={qa.id} className="rounded-lg bg-white p-4 shadow border border-gray-200 hover:border-purple-300 transition-colors">
+                <div className="flex items-start">
+                  <div className="flex-shrink-0 mt-1">
+                    <svg className="h-5 w-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                  </div>
+                  <div className="ml-3 flex-1">
+                    <p className="font-medium text-gray-900">Q: {qa.question}</p>
+                    <p className="mt-2 text-sm text-gray-600">A: {qa.answer}</p>
+                  </div>
+                </div>
               </div>
             ))}
             {qaPairs.length === 0 && (
-              <p className="text-center text-sm text-gray-500">
-                No Q&A pairs added yet
-              </p>
+              <div className="text-center py-8">
+                <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+                <h3 className="mt-2 text-sm font-medium text-gray-900">No Q&A pairs</h3>
+                <p className="mt-1 text-sm text-gray-500">Get started by adding your first question and answer pair.</p>
+              </div>
             )}
           </div>
         </div>
