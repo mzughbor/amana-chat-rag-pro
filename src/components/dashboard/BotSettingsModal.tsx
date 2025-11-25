@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Modal from "~/components/ui/Modal";
 import Button from "~/components/ui/Button";
 
@@ -25,8 +25,61 @@ export default function BotSettingsModal({
   const [copied, setCopied] = useState(false);
   const [primaryColor, setPrimaryColor] = useState("#6B46C1");
   const [cornerRadius, setCornerRadius] = useState("rounded-full");
-  const widgetUrl = "https://cdn.example.com/widget.js";
-  const snippet = `<script src="${widgetUrl}" data-bot-id="${bot.id}"></script>`;
+  const [saving, setSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const widgetUrl = `${window.location.origin}/widget.js`;
+  const snippet = `<script src="${widgetUrl}?siteId=${bot.id}"></script>`;
+
+  // Load existing widget settings when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      loadWidgetSettings();
+    }
+  }, [isOpen, bot.id]);
+
+  const loadWidgetSettings = async () => {
+    try {
+      // In a real implementation, we would fetch the current settings from the API
+      // For now, we'll use default values
+      setPrimaryColor("#6B46C1");
+      setCornerRadius("rounded-full");
+    } catch (error) {
+      console.error("Error loading widget settings:", error);
+    }
+  };
+
+  const saveWidgetSettings = async () => {
+    setSaving(true);
+    setSaveSuccess(false);
+    
+    try {
+      const widgetSettings = {
+        primaryColor,
+        cornerRadius,
+      };
+
+      const response = await fetch(`/api/site/${bot.id}/widget-settings`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ widgetSettings }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to save widget settings");
+      }
+
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 2000);
+    } catch (error) {
+      console.error("Error saving widget settings:", error);
+      alert("Failed to save widget settings. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(snippet);
@@ -72,9 +125,36 @@ export default function BotSettingsModal({
 
         {/* Theme Controls */}
         <div>
-          <h3 className="text-lg font-semibold text-slate-900 mb-4">
-            Theme Controls
-          </h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-slate-900">
+              Theme Controls
+            </h3>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={saveWidgetSettings}
+              disabled={saving}
+            >
+              {saving ? (
+                <span className="flex items-center gap-2">
+                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Saving...
+                </span>
+              ) : saveSuccess ? (
+                <span className="flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Saved!
+                </span>
+              ) : (
+                "Save Settings"
+              )}
+            </Button>
+          </div>
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">

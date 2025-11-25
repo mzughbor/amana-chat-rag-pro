@@ -28,7 +28,7 @@ export default function CreateBotWizard({
 }: CreateBotWizardProps) {
   const [step, setStep] = useState(1);
   const [botName, setBotName] = useState("");
-  const [welcomeMessage, setWelcomeMessage] = useState("");
+  const [welcomeMessage, setWelcomeMessage] = useState("Hello! How can I help you today?");
   const [apiKey, setApiKey] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [ingestionStatus, setIngestionStatus] = useState<IngestionStatus>("queued");
@@ -37,6 +37,7 @@ export default function CreateBotWizard({
   const [toastMessage, setToastMessage] = useState("");
   const [toastType, setToastType] = useState<"success" | "error" | "info">("info");
   const [testingApiKey, setTestingApiKey] = useState(false);
+  const [creatingSite, setCreatingSite] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -67,8 +68,8 @@ export default function CreateBotWizard({
 
   const handleNext = () => {
     if (step === 1) {
-      if (!botName.trim() || !welcomeMessage.trim()) {
-        setError("Please fill in all fields");
+      if (!botName.trim()) {
+        setError("Please fill in the bot name");
         return;
       }
       setError("");
@@ -81,11 +82,7 @@ export default function CreateBotWizard({
       setError("");
       setStep(3);
     } else if (step === 3) {
-      if (!selectedFile) {
-        setError("Please upload a file");
-        return;
-      }
-      setError("");
+      // Skip file upload step for now, go directly to completion
       setStep(4);
       // Simulate ingestion process
       simulateIngestion();
@@ -102,21 +99,71 @@ export default function CreateBotWizard({
     }, 500);
   };
 
-  const handleComplete = () => {
-    const newBot: Bot = {
-      id: Date.now().toString(),
-      name: botName,
-      welcomeMessage,
-      createdAt: new Date().toISOString(),
-    };
-    onComplete(newBot);
-    resetWizard();
+  const handleComplete = async () => {
+    setCreatingSite(true);
+    setError("");
+
+    try {
+      // Create the site in the database
+      const response = await fetch("/api/sites", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: botName,
+          welcomeMessage: welcomeMessage,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || data.error || "Failed to create site");
+      }
+
+      // Save API key
+      const apiKeyResponse = await fetch("/api/site/key", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          apiKey: apiKey,
+        }),
+      });
+
+      const apiKeyData = await apiKeyResponse.json();
+
+      if (!apiKeyResponse.ok) {
+        throw new Error(apiKeyData.message || apiKeyData.error || "Failed to save API key");
+      }
+
+      // Create bot object with real ID from database
+      const newBot: Bot = {
+        id: data.id,
+        name: data.name,
+        welcomeMessage: welcomeMessage,
+        createdAt: data.createdAt,
+      };
+
+      onComplete(newBot);
+      resetWizard();
+    } catch (err) {
+      console.error("Error creating bot:", err);
+      setError(err instanceof Error ? err.message : "Failed to create bot");
+      setToastMessage("Failed to create bot. Please try again.");
+      setToastType("error");
+      setToastVisible(true);
+    } finally {
+      setCreatingSite(false);
+    }
   };
 
   const resetWizard = () => {
     setStep(1);
     setBotName("");
-    setWelcomeMessage("");
+    setWelcomeMessage("Hello! How can I help you today?");
     setApiKey("");
     setSelectedFile(null);
     setIngestionStatus("queued");
@@ -401,9 +448,19 @@ export default function CreateBotWizard({
             <Button
               variant="primary"
               onClick={handleComplete}
-              disabled={ingestionStatus !== "done"}
+              disabled={ingestionStatus !== "done" || creatingSite}
             >
-              Complete
+              {creatingSite ? (
+                <span className="flex items-center gap-2">
+                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Creating...
+                </span>
+              ) : (
+                "Complete"
+              )}
             </Button>
           )}
         </div>
