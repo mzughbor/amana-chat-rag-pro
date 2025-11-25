@@ -34,74 +34,58 @@ export default function UploadContent({
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
   const [qaSubmitting, setQaSubmitting] = useState(false);
+  const [selectedFileName, setSelectedFileName] = useState("");
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file type on frontend
+    // Set the selected file name
+    setSelectedFileName(file.name);
+
     if (file.type !== "application/pdf") {
-      setUploadError("Only PDF files are allowed");
+      setUploadError("Please upload a PDF file");
+      setSelectedFileName("");
       return;
     }
 
-    // Validate file size (10MB limit)
-    const MAX_SIZE = 10 * 1024 * 1024;
-    if (file.size > MAX_SIZE) {
-      setUploadError("File size must be less than 10MB");
+    if (file.size > 10 * 1024 * 1024) {
+      setUploadError("File size exceeds 10MB limit");
+      setSelectedFileName("");
       return;
     }
 
-    setUploading(true);
     setUploadError("");
+    setUploading(true);
     setUploadProgress("Uploading file...");
 
     const formData = new FormData();
     formData.append("file", file);
 
     try {
-      setUploadProgress("Processing document...");
       const response = await fetch("/api/content/upload", {
         method: "POST",
         body: formData,
-        // Add timeout to prevent hanging
-        signal: AbortSignal.timeout(120000), // 2 minutes timeout
       });
-
-      // Handle response based on content type
-      const contentType = response.headers.get("content-type");
-      
-      if (!response.ok) {
-        // Handle error responses
-        if (contentType?.includes("application/json")) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || errorData.message || `Server error: ${response.status}`);
-        } else {
-          // Non-JSON error response (likely HTML error page)
-          const text = await response.text();
-          console.error("Server error response:", text.substring(0, 500));
-          throw new Error(`Server error: ${response.status} - Please check the server logs for details`);
-        }
-      }
-
-      // Success response - should be JSON
-      if (!contentType?.includes("application/json")) {
-        const text = await response.text();
-        console.error("Unexpected non-JSON success response:", text);
-        throw new Error("Unexpected server response format");
-      }
 
       const data = await response.json();
 
-      // Success - show success message and reload
-      setUploadProgress("Successfully processed!");
-      setUploadError("");
-      alert(`Successfully processed ${data.chunksProcessed || 0} chunks from the document!`);
+      if (!response.ok) {
+        throw new Error(data.error || "Upload failed");
+      }
+
+      // Reset file input and clear selected file name
+      e.target.value = "";
+      setSelectedFileName("");
+      
+      // Reload the page to show the new document
       window.location.reload();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Upload error:", error);
-      setUploadProgress("");
-      if (error instanceof Error && error.name === 'TimeoutError') {
+      setUploading(false);
+      setSelectedFileName("");
+      
+      if (error.name === "AbortError") {
         setUploadError("Upload timeout - file may be too large or processing is taking too long");
       } else if (error instanceof Error && error.message.includes('PDF processing failed')) {
         setUploadError(`PDF processing failed. This may be due to: 
@@ -123,6 +107,15 @@ export default function UploadContent({
       e.target.value = "";
     }
   };
+
+  const handleRemoveFile = () => {
+    setSelectedFileName("");
+    // Clear the file input
+    const fileInput = document.getElementById("pdf-upload") as HTMLInputElement;
+    if (fileInput) {
+      fileInput.value = "";
+    }
+  }
 
   const handleQASubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -188,18 +181,50 @@ export default function UploadContent({
             </p>
 
             <div className="mt-4">
-              <label htmlFor="pdf-upload" className="block">
-                <span className="sr-only">Choose PDF file</span>
-                <input
-                  id="pdf-upload"
-                  type="file"
-                  accept="application/pdf"
-                  onChange={handleFileUpload}
-                  disabled={uploading}
-                  aria-label="Upload PDF file"
-                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-white hover:file:bg-primary/90"
-                />
-              </label>
+              <div className="flex items-center justify-center w-full">
+                <label htmlFor="pdf-upload" className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors">
+                  <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                    <svg className="w-8 h-8 mb-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                    <p className="mb-2 text-sm text-gray-500">
+                      <span className="font-semibold">Click to upload</span> or drag and drop
+                    </p>
+                    <p className="text-xs text-gray-500">PDF files only</p>
+                  </div>
+                  <input
+                    id="pdf-upload"
+                    type="file"
+                    accept="application/pdf"
+                    onChange={handleFileUpload}
+                    disabled={uploading}
+                    aria-label="Upload PDF file"
+                    className="hidden"
+                  />
+                </label>
+              </div>
+              
+              {selectedFileName && (
+                <div className="mt-2 flex items-center justify-between text-sm text-gray-600 bg-gray-50 rounded-md p-2">
+                  <div className="flex items-center">
+                    <svg className="flex-shrink-0 mr-2 h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span className="truncate">{selectedFileName}</span>
+                  </div>
+                  {!uploading && (
+                    <button 
+                      onClick={handleRemoveFile}
+                      className="text-gray-400 hover:text-gray-600"
+                      aria-label="Remove file"
+                    >
+                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
             {uploading && (
