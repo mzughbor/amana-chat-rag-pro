@@ -40,4 +40,3 @@ export async function generateQueryEmbedding(
   const embeddings = await generateEmbeddings([query], apiKey);
   return embeddings[0] ?? [];
 }
-

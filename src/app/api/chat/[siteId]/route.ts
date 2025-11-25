@@ -63,7 +63,7 @@ Answer the user's question based on the context above. Be concise and helpful.`;
     // Generate response using OpenAI
     const openai = new OpenAI({ apiKey });
     const completion = await openai.chat.completions.create({
-      model: "gpt-4",
+      model: "gpt-4o-mini",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: message },
