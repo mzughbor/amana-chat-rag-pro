@@ -43,25 +43,25 @@ console.log(`\n🔗 Current DATABASE_URL: ${currentUrl}`);
 if (currentUrl.includes('pooler.supabase.com') && currentUrl.includes(':6543')) {
   console.log('\n⚠️  Detected Supabase Pooler connection (port 6543)');
   console.log('💡 Suggested fix: Switch to Direct Connection (port 5432)');
-  
+
   // Extract components using a more flexible pattern
   const urlPattern = /postgresql:\/\/([^:]+):([^@]+)@([^\/]+)\/(.+)$/;
   const match = currentUrl.match(urlPattern);
-  
+
   if (match) {
     const [, user, password, hostAndPort, databaseAndParams] = match;
-    
+
     // Split host and port
     const [host] = hostAndPort.split(':');
-    
+
     // Extract database name (before any query parameters)
     const database = databaseAndParams.split('?')[0];
-    
+
     // Replace pooler host with direct host
     const projectId = host.split('.')[0]; // Extract project ID from pooler host
     const directHost = `${projectId}.db.supabase.co`;
     const directUrl = `postgresql://${user}:${password}@${directHost}:5432/${database}`;
-    
+
     console.log(`\n🔧 Suggested DATABASE_URL (Direct Connection):`);
     console.log(directUrl);
     console.log('\n📝 To fix:');
