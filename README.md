@@ -200,6 +200,23 @@ Unauthenticated users are automatically redirected to `/login`.
 - `npm run db:studio` - Open Prisma Studio
 - `npm run db:generate` - Generate Prisma client
 
+## 🧪 Testing Instructions
+
+To test the widget functionality locally:
+
+1. **Start the main application server**:
+```bash
+npm run dev -- -p 3000
+```
+
+2. **Start the test site server**:
+```bash
+cd test-chat-site && npx -y serve . -p 3800
+```
+
+3. **Access the test site**:
+Open [http://localhost:3800](http://localhost:3800) in your browser and click the chat widget button to test the functionality.
+
 ## 🔄 Routing & Navigation
 
 ### Public Routes
