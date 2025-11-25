@@ -93,4 +93,3 @@ export async function ensureDbConnection() {
 }
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = db;
-

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "~/server/auth";
 import { db } from "~/lib/db";
+import { getSitesByUserEmail, createSite } from "~/lib/supabaseRestClient";
 
 export async function GET() {
   try {
@@ -11,25 +12,38 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Fetch sites for the authenticated user
-    const userSites = await db.site.findMany({
-      where: {
-        user: {
-          email: session.user.email,
+    // Try to fetch sites from database first
+    try {
+      const userSites = await db.site.findMany({
+        where: {
+          user: {
+            email: session.user.email,
+          },
         },
-      },
-      select: {
-        id: true,
-        name: true,
-        createdAt: true,
-        widgetSettings: true,
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-    });
+        select: {
+          id: true,
+          name: true,
+          createdAt: true,
+          widgetSettings: true,
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
 
-    return NextResponse.json(userSites);
+      return NextResponse.json(userSites);
+    } catch (dbError: any) {
+      // If database connection fails, fallback to REST API
+      console.warn("Database connection failed, falling back to REST API:", dbError.message);
+      
+      try {
+        const userSites = await getSitesByUserEmail(session.user.email);
+        return NextResponse.json(userSites);
+      } catch (restError: any) {
+        console.error("REST API fallback also failed:", restError.message);
+        throw restError;
+      }
+    }
   } catch (error: any) {
     console.error("Error fetching sites:", error);
     
@@ -62,16 +76,29 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Site name is required" }, { status: 400 });
     }
 
-    // Create new site
-    const newSite = await db.site.create({
-      data: {
-        name,
-        userId: session.user.id,
-        widgetSettings: {}, // Default empty settings
-      },
-    });
+    // Try to create site in database first
+    try {
+      const newSite = await db.site.create({
+        data: {
+          name,
+          userId: session.user.id,
+          widgetSettings: {}, // Default empty settings
+        },
+      });
 
-    return NextResponse.json(newSite);
+      return NextResponse.json(newSite);
+    } catch (dbError: any) {
+      // If database connection fails, fallback to REST API
+      console.warn("Database connection failed, falling back to REST API:", dbError.message);
+      
+      try {
+        const newSite = await createSite(session.user.id, name, {});
+        return NextResponse.json(newSite);
+      } catch (restError: any) {
+        console.error("REST API fallback also failed:", restError.message);
+        throw restError;
+      }
+    }
   } catch (error: any) {
     console.error("Error creating site:", error);
     
