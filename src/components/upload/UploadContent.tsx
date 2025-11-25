@@ -35,6 +35,10 @@ export default function UploadContent({
   const [answer, setAnswer] = useState("");
   const [qaSubmitting, setQaSubmitting] = useState(false);
   const [selectedFileName, setSelectedFileName] = useState("");
+  const [editingQaId, setEditingQaId] = useState<string | null>(null);
+  const [editQuestion, setEditQuestion] = useState("");
+  const [editAnswer, setEditAnswer] = useState("");
+  const [deletingQaId, setDeletingQaId] = useState<string | null>(null);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -116,6 +120,101 @@ export default function UploadContent({
       fileInput.value = "";
     }
   }
+
+  const startEditingQa = (qa: any) => {
+    setEditingQaId(qa.id);
+    setEditQuestion(qa.question);
+    setEditAnswer(qa.answer);
+  };
+
+  const cancelEditingQa = () => {
+    setEditingQaId(null);
+    setEditQuestion("");
+    setEditAnswer("");
+  };
+
+  const handleEditQaSubmit = async (e: React.FormEvent, qaId: string) => {
+    e.preventDefault();
+    setQaSubmitting(true);
+
+    try {
+      const response = await fetch("/api/content/qa", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: qaId, question: editQuestion, answer: editAnswer }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to update Q&A pair");
+      }
+
+      // Reset editing state
+      setEditingQaId(null);
+      setEditQuestion("");
+      setEditAnswer("");
+      
+      // Reload the page to show updated data
+      window.location.reload();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to update Q&A pair");
+    } finally {
+      setQaSubmitting(false);
+    }
+  };
+
+  const handleDeleteQa = async (qaId: string) => {
+    if (!confirm("Are you sure you want to delete this Q&A pair?")) {
+      return;
+    }
+
+    setDeletingQaId(qaId);
+
+    try {
+      const response = await fetch("/api/content/qa", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: qaId }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to delete Q&A pair");
+      }
+
+      // Reload the page to show updated data
+      window.location.reload();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to delete Q&A pair");
+    } finally {
+      setDeletingQaId(null);
+    }
+  };
+
+  const handleDeleteDocument = async (docId: string) => {
+    if (!confirm("Are you sure you want to delete this document? This will remove all associated data.")) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/content/documents/${docId}`, {
+        method: "DELETE",
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to delete document");
+      }
+
+      // Reload the page to show updated data
+      window.location.reload();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to delete document");
+    }
+  };
 
   const handleQASubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -356,6 +455,9 @@ export default function UploadContent({
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                     Uploaded
                   </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 bg-white">
@@ -387,11 +489,19 @@ export default function UploadContent({
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                       {new Date(doc.createdAt).toLocaleDateString()}
                     </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
+                      <button
+                        onClick={() => handleDeleteDocument(doc.id)}
+                        className="text-red-600 hover:text-red-900"
+                      >
+                        Delete
+                      </button>
+                    </td>
                   </tr>
                 ))}
                 {documents.length === 0 && (
                   <tr>
-                    <td colSpan={3} className="px-6 py-4 text-center text-sm text-gray-500">
+                    <td colSpan={4} className="px-6 py-4 text-center text-sm text-gray-500">
                       No documents uploaded yet
                     </td>
                   </tr>
@@ -412,17 +522,107 @@ export default function UploadContent({
           <div className="mt-4 space-y-4">
             {qaPairs.map((qa) => (
               <div key={qa.id} className="rounded-lg bg-white p-4 shadow border border-gray-200 hover:border-purple-300 transition-colors">
-                <div className="flex items-start">
-                  <div className="flex-shrink-0 mt-1">
-                    <svg className="h-5 w-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                    </svg>
+                {editingQaId === qa.id ? (
+                  <form onSubmit={(e) => handleEditQaSubmit(e, qa.id)} className="space-y-4">
+                    <div>
+                      <label htmlFor={`edit-question-${qa.id}`} className="block text-sm font-medium text-gray-700">
+                        Question
+                      </label>
+                      <textarea
+                        id={`edit-question-${qa.id}`}
+                        value={editQuestion}
+                        onChange={(e) => setEditQuestion(e.target.value)}
+                        required
+                        rows={3}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor={`edit-answer-${qa.id}`} className="block text-sm font-medium text-gray-700">
+                        Answer
+                      </label>
+                      <textarea
+                        id={`edit-answer-${qa.id}`}
+                        value={editAnswer}
+                        onChange={(e) => setEditAnswer(e.target.value)}
+                        required
+                        rows={4}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm"
+                      />
+                    </div>
+                    <div className="flex justify-end space-x-2">
+                      <button
+                        type="button"
+                        onClick={cancelEditingQa}
+                        className="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md text-gray-700 bg-gray-100 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={qaSubmitting}
+                        className="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
+                      >
+                        {qaSubmitting ? (
+                          <>
+                            <svg className="mr-2 h-4 w-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                            </svg>
+                            Updating...
+                          </>
+                        ) : (
+                          "Update"
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="flex items-start">
+                    <div className="flex-shrink-0 mt-1">
+                      <svg className="h-5 w-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                      </svg>
+                    </div>
+                    <div className="ml-3 flex-1">
+                      <p className="font-medium text-gray-900">Q: {qa.question}</p>
+                      <p className="mt-2 text-sm text-gray-600">A: {qa.answer}</p>
+                      <div className="mt-3 flex space-x-2">
+                        <button
+                          onClick={() => startEditingQa(qa)}
+                          className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-md text-purple-700 bg-purple-100 hover:bg-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        >
+                          <svg className="mr-1 h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteQa(qa.id)}
+                          disabled={deletingQaId === qa.id}
+                          className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-md text-red-700 bg-red-100 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50"
+                        >
+                          {deletingQaId === qa.id ? (
+                            <>
+                              <svg className="mr-1 h-3 w-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                              </svg>
+                              Deleting...
+                            </>
+                          ) : (
+                            <>
+                              <svg className="mr-1 h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                              Delete
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  <div className="ml-3 flex-1">
-                    <p className="font-medium text-gray-900">Q: {qa.question}</p>
-                    <p className="mt-2 text-sm text-gray-600">A: {qa.answer}</p>
-                  </div>
-                </div>
+                )}
               </div>
             ))}
             {qaPairs.length === 0 && (
