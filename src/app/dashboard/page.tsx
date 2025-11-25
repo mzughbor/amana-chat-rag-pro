@@ -26,50 +26,52 @@ export default function DashboardPage() {
   const [showBotSettings, setShowBotSettings] = useState(false);
 
   useEffect(() => {
-    if (status === "loading") {
-      return;
-    }
-
-    if (status === "unauthenticated" || !session) {
+    if (status === "unauthenticated") {
       router.push("/login");
       return;
     }
 
-    // User is authenticated, load bots/sites
-    fetchBots();
-  }, [session, status, router]);
+    if (status === "authenticated") {
+      fetchUserSites();
+    }
+  }, [status, session, router]);
 
-  const fetchBots = async () => {
+  const fetchUserSites = async () => {
     try {
       setLoading(true);
-      // In a real implementation, this would fetch from an API endpoint
-      // For now, we'll use a placeholder but with the correct structure
-      // You would replace this with an actual API call to get user's sites
-      setBots([
-        { 
-          id: "cmiacw2od0002rc4lfqzzved6", 
-          name: "Default Site", 
-          welcomeMessage: "Hello! How can I help you today?",
-          createdAt: new Date().toISOString()
-        }
-      ]);
+      // Fetch actual sites from the API
+      const response = await fetch("/api/sites", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch sites");
+      }
+
+      const userSites = await response.json();
+
+      // Transform sites to bots format
+      const transformedBots = userSites.map((site: any) => ({
+        id: site.id,
+        name: site.name,
+        welcomeMessage: "Hello! How can I help you today?",
+        createdAt: site.createdAt,
+      }));
+
+      setBots(transformedBots);
     } catch (error) {
-      console.error("Error fetching bots:", error);
-      // Fallback to placeholder with correct site ID
-      setBots([
-        { 
-          id: "cmiacw2od0002rc4lfqzzved6", 
-          name: "Default Site", 
-          welcomeMessage: "Hello! How can I help you today?",
-          createdAt: new Date().toISOString()
-        }
-      ]);
+      console.error("Error fetching user sites:", error);
+      // Fallback to empty array if there's an error
+      setBots([]);
     } finally {
       setLoading(false);
     }
   };
 
-  if (loading || status === "loading") {
+  if (loading) {
     return (
       <div className="py-8">
         <div className="flex items-center justify-center min-h-[400px]">
