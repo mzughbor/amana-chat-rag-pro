@@ -49,7 +49,7 @@
   // Create iframe for chat
   let chatIframe = null;
   // Use the widget-specific chat route
-  const chatUrl = `http://localhost:3002/widget/chat/${siteId}`;
+  const chatUrl = `http://localhost:3000/widget/chat/${siteId}`;
 
   widgetButton.addEventListener('click', function () {
     if (chatIframe) {

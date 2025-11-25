@@ -9,19 +9,20 @@ import Button from "~/components/ui/Button";
 import CreateBotWizard from "~/components/dashboard/CreateBotWizard";
 import BotSettingsModal from "~/components/dashboard/BotSettingsModal";
 
-interface Site {
+interface Bot {
   id: string;
   name: string;
-  createdAt: Date;
+  welcomeMessage: string;
+  createdAt: string;
 }
 
 export default function DashboardPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
   const [loading, setLoading] = useState(true);
-  const [sites, setSites] = useState<Site[]>([]);
+  const [bots, setBots] = useState<Bot[]>([]);
   const [showCreateBot, setShowCreateBot] = useState(false);
-  const [selectedSite, setSelectedSite] = useState<Site | null>(null);
+  const [selectedBot, setSelectedBot] = useState<Bot | null>(null);
   const [showBotSettings, setShowBotSettings] = useState(false);
 
   useEffect(() => {
@@ -34,38 +35,33 @@ export default function DashboardPage() {
       return;
     }
 
-    // User is authenticated, load sites
-    fetchSites();
+    // User is authenticated, load bots/sites
+    fetchBots();
   }, [session, status, router]);
 
-  const fetchSites = async () => {
+  const fetchBots = async () => {
     try {
       setLoading(true);
       // In a real implementation, this would fetch from an API endpoint
       // For now, we'll use a placeholder but with the correct structure
       // You would replace this with an actual API call to get user's sites
-      const response = await fetch('/api/sites');
-      if (response.ok) {
-        const userSites = await response.json();
-        setSites(userSites);
-      } else {
-        // Fallback to placeholder with correct site ID
-        setSites([
-          { 
-            id: "cmiacw2od0002rc4lfqzzved6", 
-            name: "Default Site", 
-            createdAt: new Date() 
-          }
-        ]);
-      }
-    } catch (error) {
-      console.error("Error fetching sites:", error);
-      // Fallback to placeholder with correct site ID
-      setSites([
+      setBots([
         { 
           id: "cmiacw2od0002rc4lfqzzved6", 
           name: "Default Site", 
-          createdAt: new Date() 
+          welcomeMessage: "Hello! How can I help you today?",
+          createdAt: new Date().toISOString()
+        }
+      ]);
+    } catch (error) {
+      console.error("Error fetching bots:", error);
+      // Fallback to placeholder with correct site ID
+      setBots([
+        { 
+          id: "cmiacw2od0002rc4lfqzzved6", 
+          name: "Default Site", 
+          welcomeMessage: "Hello! How can I help you today?",
+          createdAt: new Date().toISOString()
         }
       ]);
     } finally {
@@ -93,7 +89,7 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-5xl font-bold text-slate-900 mb-3">Dashboard</h1>
           <p className="text-xl text-slate-700">
-            Welcome back, {session.user?.name || session.user?.email?.split("@")[0] || "User"}! Manage your sites.
+            Welcome back, {session.user?.name || session.user?.email?.split("@")[0] || "User"}! Manage your bots.
           </p>
         </div>
       </div>
@@ -103,8 +99,8 @@ export default function DashboardPage() {
         <h3 className="text-lg font-semibold text-slate-900 mb-4">Usage</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <p className="text-sm text-slate-700">Total Sites</p>
-            <p className="text-2xl font-bold text-slate-900">{sites.length}</p>
+            <p className="text-sm text-slate-700">Total Bots</p>
+            <p className="text-2xl font-bold text-slate-900">{bots.length}</p>
           </div>
           <div>
             <p className="text-sm text-slate-700">Messages This Month</p>
@@ -118,31 +114,31 @@ export default function DashboardPage() {
       </Card>
 
       <div className="mb-6 flex items-center justify-between">
-        <h2 className="text-2xl font-semibold text-slate-900">Your Sites</h2>
+        <h2 className="text-2xl font-semibold text-slate-900">Your Bots</h2>
         <Button variant="primary" onClick={() => setShowCreateBot(true)}>
-          Create Site
+          Create Bot
         </Button>
       </div>
 
-      {sites.length === 0 ? (
+      {bots.length === 0 ? (
         <Card className="p-12 text-center">
           <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
           </svg>
-          <h3 className="text-lg font-medium text-slate-900 mb-2">No sites yet</h3>
-          <p className="text-slate-700 mb-4">Get started by creating your first site.</p>
+          <h3 className="text-lg font-medium text-slate-900 mb-2">No bots yet</h3>
+          <p className="text-slate-700 mb-4">Get started by creating your first bot.</p>
           <Button variant="primary" onClick={() => setShowCreateBot(true)}>
-            Create Site
+            Create Bot
           </Button>
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {sites.map((site) => (
-            <Card key={site.id} hover>
+          {bots.map((bot) => (
+            <Card key={bot.id} hover>
               <div className="flex items-start justify-between mb-4">
                 <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-slate-900 mb-2">{site.name}</h3>
-                  <p className="text-sm text-slate-700 line-clamp-2">Site ID: {site.id}</p>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">{bot.name}</h3>
+                  <p className="text-sm text-slate-700 line-clamp-2">Bot ID: {bot.id}</p>
                 </div>
               </div>
               <div className="flex gap-2 mt-4">
@@ -151,13 +147,13 @@ export default function DashboardPage() {
                   size="sm"
                   className="flex-1"
                   onClick={() => {
-                    setSelectedSite(site);
+                    setSelectedBot(bot);
                     setShowBotSettings(true);
                   }}
                 >
                   Settings
                 </Button>
-                <Link href={`/chat/${site.id}`} className="flex-1">
+                <Link href={`/chat/${bot.id}`} className="flex-1">
                   <Button
                     variant="primary"
                     size="sm"
@@ -176,21 +172,21 @@ export default function DashboardPage() {
         <CreateBotWizard
           isOpen={showCreateBot}
           onClose={() => setShowCreateBot(false)}
-          onComplete={(newSite) => {
-            setSites([...sites, newSite]);
+          onComplete={(newBot) => {
+            setBots([...bots, newBot]);
             setShowCreateBot(false);
           }}
         />
       )}
 
-      {showBotSettings && selectedSite && (
+      {showBotSettings && selectedBot && (
         <BotSettingsModal
           isOpen={showBotSettings}
           onClose={() => {
             setShowBotSettings(false);
-            setSelectedSite(null);
+            setSelectedBot(null);
           }}
-          bot={selectedSite}
+          bot={selectedBot}
         />
       )}
     </div>
