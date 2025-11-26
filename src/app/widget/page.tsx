@@ -41,9 +41,9 @@ export default async function WidgetPage() {
       
       if (site) {
         siteData = site;
-        // For REST API, the bot is nested in the response
+        // For REST API, the bot is nested in the response as 'bots' (plural)
         // Handle both object and array cases generically
-        const botData = (site as any).bot;
+        const botData = (site as any).bots;
         if (Array.isArray(botData) && botData.length > 0) {
           botId = botData[0].id || null;
         } else if (botData && typeof botData === 'object' && botData.id) {

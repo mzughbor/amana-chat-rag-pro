@@ -42,7 +42,7 @@ export async function getSiteByUserId(userId: string) {
   try {
     const { data: sites, error: siteError } = await supabaseRestClient
       .from('sites')
-      .select('id, name, userId, bot(id, name, welcomeMessage, widgetSettings, scriptEmbedId)')
+      .select('id, name, userId, bots(id, name, welcomeMessage, widgetSettings, scriptEmbedId)')
       .eq('userId', userId)
       .limit(1)
       .single();
