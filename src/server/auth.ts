@@ -101,31 +101,77 @@ export const authOptions: NextAuthOptions = {
                 image: userData.image,
               };
             } else {
-              // Create user if not exists
-              const { data: newUser, error: createError } = await supabaseRestClient
-                .from('users')
-                .insert({
-                  email: data.user.email!,
+              // Create user if not exists - this handles the case where a user
+              // signed up but the database sync failed or was delayed
+              try {
+                // Generate an ID for the user
+                const userId = data.user.id || ('c' + Math.random().toString(36).substring(2, 10) + Date.now().toString(36));
+                
+                // Get current timestamp
+                const now = new Date().toISOString();
+                
+                const { data: newUser, error: createError } = await supabaseRestClient
+                  .from('users')
+                  .insert({
+                    id: userId,
+                    email: data.user.email!,
+                    name: data.user.user_metadata?.name ?? null,
+                    image: data.user.user_metadata?.avatar_url ?? null,
+                    createdAt: now,
+                    updatedAt: now,
+                  })
+                  .select()
+                  .single();
+
+                if (createError) throw createError;
+                
+                user = {
+                  id: newUser.id,
+                  email: newUser.email,
+                  name: newUser.name,
+                  image: newUser.image,
+                };
+                
+                // Also create an account entry to bind with Supabase auth
+                const { error: accountError } = await supabaseRestClient
+                  .from('accounts')
+                  .insert({
+                    id: 'c' + Math.random().toString(36).substring(2, 10) + Date.now().toString(36), // Generate ID for account
+                    userId: newUser.id,
+                    type: 'oauth',
+                    provider: 'supabase',
+                    providerAccountId: data.user.id,
+                    createdAt: now,
+                    updatedAt: now,
+                  });
+                  
+                if (accountError) {
+                  console.warn("Failed to create account binding:", accountError.message);
+                }
+              } catch (createError: any) {
+                console.error("Failed to create user during auth:", createError);
+                // If we can't create the user, we should still allow them to sign in
+                // This might happen if there's a temporary database issue
+                user = {
+                  id: data.user.id,
+                  email: data.user.email,
                   name: data.user.user_metadata?.name ?? null,
                   image: data.user.user_metadata?.avatar_url ?? null,
-                })
-                .select()
-                .single();
-
-              if (createError) throw createError;
-              
-              user = {
-                id: newUser.id,
-                email: newUser.email,
-                name: newUser.name,
-                image: newUser.image,
-              };
+                };
+              }
             }
 
             return user;
           } catch (restError: any) {
             console.error("Error with REST API user management:", restError.message);
-            throw new Error("Failed to manage user account. Please try again later.");
+            // Even if database sync fails, we can still authenticate the user
+            // using the data from Supabase Auth
+            return {
+              id: data.user.id,
+              email: data.user.email,
+              name: data.user.user_metadata?.name ?? null,
+              image: data.user.user_metadata?.avatar_url ?? null,
+            };
           }
         } catch (error: any) {
           console.error("Authentication error:", error.message);

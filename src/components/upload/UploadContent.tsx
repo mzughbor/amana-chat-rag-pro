@@ -317,7 +317,7 @@ export default function UploadContent({
           </div>
           
           {/* Bot Selection Dropdown */}
-          {bots.length > 1 && (
+          {bots.length > 0 && (
             <div className="flex items-center space-x-2">
               <label htmlFor="bot-select" className="text-sm font-medium text-gray-700">
                 Select Bot:

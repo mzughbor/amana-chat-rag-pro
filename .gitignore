@@ -99,3 +99,4 @@ lerna-debug.log*
 # Clean cache folder
 /clean/
 
+node_modules

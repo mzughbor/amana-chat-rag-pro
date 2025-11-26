@@ -180,6 +180,7 @@ export async function POST(request: NextRequest) {
           const { data: docData, error: docError } = await supabaseRestClient
             .from('documents')
             .insert({
+              id: crypto.randomUUID(), // Add ID
               botId: bot.id,
               sourceType: 'pdf',
               fileName: file.name,
@@ -187,7 +188,9 @@ export async function POST(request: NextRequest) {
               fileSize: file.size,
               storagePath: '',
               status: 'processing',
-              metadata: {}
+              metadata: {},
+              createdAt: new Date().toISOString(), // Add createdAt
+              updatedAt: new Date().toISOString(), // Add updatedAt
             })
             .select()
             .single();

@@ -1,27 +1,27 @@
 // This script enhances the static widget page with full chat functionality
 (function () {
-    'use strict';
+  'use strict';
 
-    // Wait for DOM to be ready
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initWidget);
-    } else {
-        initWidget();
+  // Wait for DOM to be ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initWidget);
+  } else {
+    initWidget();
+  }
+
+  function initWidget() {
+    // Get the container and site ID
+    const container = document.getElementById('amana-rag-widget-container');
+    if (!container) return;
+
+    const siteId = container.getAttribute('data-site-id');
+    if (!siteId) {
+      console.error('AmanaRAG: siteId is required');
+      return;
     }
 
-    function initWidget() {
-        // Get the container and site ID
-        const container = document.getElementById('amana-rag-widget-container');
-        if (!container) return;
-
-        const siteId = container.getAttribute('data-site-id');
-        if (!siteId) {
-            console.error('AmanaRAG: siteId is required');
-            return;
-        }
-
-        // Replace the placeholder with the actual chat interface
-        container.innerHTML = `
+    // Replace the placeholder with the actual chat interface
+    container.innerHTML = `
       <div class="h-screen flex flex-col bg-white overflow-hidden">
         <!-- Header - Simplified for widget -->
         <div class="bg-gradient-to-r from-purple-600 to-purple-700 px-4 py-3 border-b border-purple-500/20 flex-shrink-0">
@@ -72,60 +72,60 @@
       </div>
     `;
 
-        // Initialize chat functionality
-        initChatFunctionality(siteId);
+    // Initialize chat functionality
+    initChatFunctionality(siteId);
+  }
+
+  function initChatFunctionality(siteId) {
+    // Get DOM elements
+    const messagesContainer = document.getElementById('amana-rag-messages');
+    const inputElement = document.getElementById('amana-rag-input');
+    const formElement = document.getElementById('amana-rag-chat-form');
+    const sendButton = document.getElementById('amana-rag-send-button');
+    const closeButton = document.getElementById('amana-rag-close-button');
+    const quickReplies = document.querySelectorAll('.amana-rag-quick-reply');
+
+    // State variables
+    let messages = [];
+    let loading = false;
+
+    // Scroll to bottom of messages
+    function scrollToBottom() {
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
 
-    function initChatFunctionality(siteId) {
-        // Get DOM elements
-        const messagesContainer = document.getElementById('amana-rag-messages');
-        const inputElement = document.getElementById('amana-rag-input');
-        const formElement = document.getElementById('amana-rag-chat-form');
-        const sendButton = document.getElementById('amana-rag-send-button');
-        const closeButton = document.getElementById('amana-rag-close-button');
-        const quickReplies = document.querySelectorAll('.amana-rag-quick-reply');
-
-        // State variables
-        let messages = [];
-        let loading = false;
-
-        // Scroll to bottom of messages
-        function scrollToBottom() {
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    // Add message to UI
+    function addMessageToUI(message) {
+      // Remove welcome message if this is the first real message
+      if (messages.length === 0) {
+        const welcomeMessage = messagesContainer.querySelector('.text-center');
+        if (welcomeMessage) {
+          welcomeMessage.remove();
         }
+      }
 
-        // Add message to UI
-        function addMessageToUI(message) {
-            // Remove welcome message if this is the first real message
-            if (messages.length === 0) {
-                const welcomeMessage = messagesContainer.querySelector('.text-center');
-                if (welcomeMessage) {
-                    welcomeMessage.remove();
-                }
-            }
+      const messageElement = document.createElement('div');
+      messageElement.className = `flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`;
 
-            const messageElement = document.createElement('div');
-            messageElement.className = `flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`;
+      const contentElement = document.createElement('div');
+      contentElement.className = `max-w-[85%] rounded-2xl px-3 py-2 ${message.role === 'user'
+        ? 'bg-purple-600 text-white'
+        : 'bg-white text-slate-900 border border-gray-200 shadow-sm'
+        }`;
+      contentElement.innerHTML = `<p class="text-sm leading-relaxed whitespace-pre-wrap">${message.content}</p>`;
 
-            const contentElement = document.createElement('div');
-            contentElement.className = `max-w-[85%] rounded-2xl px-3 py-2 ${message.role === 'user'
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-white text-slate-900 border border-gray-200 shadow-sm'
-                }`;
-            contentElement.innerHTML = `<p class="text-sm leading-relaxed whitespace-pre-wrap">${message.content}</p>`;
+      messageElement.appendChild(contentElement);
+      messagesContainer.appendChild(messageElement);
 
-            messageElement.appendChild(contentElement);
-            messagesContainer.appendChild(messageElement);
+      scrollToBottom();
+    }
 
-            scrollToBottom();
-        }
-
-        // Show loading indicator
-        function showLoading() {
-            const loadingElement = document.createElement('div');
-            loadingElement.className = 'flex justify-start';
-            loadingElement.id = 'amana-rag-loading';
-            loadingElement.innerHTML = `
+    // Show loading indicator
+    function showLoading() {
+      const loadingElement = document.createElement('div');
+      loadingElement.className = 'flex justify-start';
+      loadingElement.id = 'amana-rag-loading';
+      loadingElement.innerHTML = `
         <div class="bg-white border border-gray-200 rounded-2xl px-3 py-2 shadow-sm">
           <div class="flex space-x-1">
             <div class="w-1.5 h-1.5 bg-purple-600 rounded-full animate-bounce"></div>
@@ -134,117 +134,117 @@
           </div>
         </div>
       `;
-            messagesContainer.appendChild(loadingElement);
-            scrollToBottom();
-        }
-
-        // Hide loading indicator
-        function hideLoading() {
-            const loadingElement = document.getElementById('amana-rag-loading');
-            if (loadingElement) {
-                loadingElement.remove();
-            }
-        }
-
-        // Send message to API
-        async function sendMessage(message) {
-            try {
-                const response = await fetch(`/api/chat/${siteId}`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ message }),
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({}));
-                    throw new Error(`HTTP error! status: ${response.status}, message: ${errorData.error || errorData.message || 'Unknown error'}`);
-                }
-
-                const data = await response.json();
-                return data.response;
-            } catch (error) {
-                console.error('Error sending message:', error);
-                // Provide more specific error messages based on the type of error
-                if (error.message.includes('503')) {
-                    return 'Service temporarily unavailable. Please try again in a moment.';
-                } else if (error.message.includes('500')) {
-                    return 'Server error occurred. Please try again.';
-                } else if (error.message.includes('404')) {
-                    return 'Bot or site not found. Please check your configuration.';
-                } else {
-                    return 'Sorry, I encountered an error. Please try again.';
-                }
-            }
-        }
-
-        // Handle form submission
-        formElement.addEventListener('submit', async function (e) {
-            e.preventDefault();
-
-            const message = inputElement.value.trim();
-            if (!message || loading) return;
-
-            // Add user message
-            const userMessage = {
-                role: 'user',
-                content: message,
-                timestamp: new Date(),
-            };
-
-            messages.push(userMessage);
-            addMessageToUI(userMessage);
-
-            // Clear input and disable form
-            inputElement.value = '';
-            loading = true;
-            sendButton.disabled = true;
-
-            // Show loading indicator
-            showLoading();
-
-            // Send message to API
-            const response = await sendMessage(message);
-
-            // Hide loading indicator
-            hideLoading();
-
-            // Add assistant message
-            const assistantMessage = {
-                role: 'assistant',
-                content: response,
-                timestamp: new Date(),
-            };
-
-            messages.push(assistantMessage);
-            addMessageToUI(assistantMessage);
-
-            // Re-enable form
-            loading = false;
-            sendButton.disabled = false;
-            inputElement.focus();
-        });
-
-        // Handle quick replies
-        quickReplies.forEach(button => {
-            button.addEventListener('click', function () {
-                const message = this.getAttribute('data-message');
-                inputElement.value = message;
-
-                // Trigger form submission
-                const event = new Event('submit', { cancelable: true, bubbles: true });
-                formElement.dispatchEvent(event);
-            });
-        });
-
-        // Handle close button
-        closeButton.addEventListener('click', function () {
-            // Notify parent window to close the widget
-            window.parent.postMessage({ type: 'CLOSE_WIDGET' }, '*');
-        });
-
-        // Focus input on load
-        inputElement.focus();
+      messagesContainer.appendChild(loadingElement);
+      scrollToBottom();
     }
+
+    // Hide loading indicator
+    function hideLoading() {
+      const loadingElement = document.getElementById('amana-rag-loading');
+      if (loadingElement) {
+        loadingElement.remove();
+      }
+    }
+
+    // Send message to API
+    async function sendMessage(message) {
+      try {
+        const response = await fetch(`/api/chat/${siteId}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ message }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(`HTTP error! status: ${response.status}, message: ${errorData.error || errorData.message || 'Unknown error'}`);
+        }
+
+        const data = await response.json();
+        return data.response;
+      } catch (error) {
+        console.error('Error sending message:', error);
+        // Provide more specific error messages based on the type of error
+        if (error.message.includes('503')) {
+          return 'Service temporarily unavailable. Please try again in a moment.';
+        } else if (error.message.includes('500')) {
+          return 'Server error occurred. Please try again.';
+        } else if (error.message.includes('404')) {
+          return 'Bot or site not found. Please check your configuration.';
+        } else {
+          return 'Sorry, I encountered an error. Please try again.';
+        }
+      }
+    }
+
+    // Handle form submission
+    formElement.addEventListener('submit', async function (e) {
+      e.preventDefault();
+
+      const message = inputElement.value.trim();
+      if (!message || loading) return;
+
+      // Add user message
+      const userMessage = {
+        role: 'user',
+        content: message,
+        timestamp: new Date(),
+      };
+
+      messages.push(userMessage);
+      addMessageToUI(userMessage);
+
+      // Clear input and disable form
+      inputElement.value = '';
+      loading = true;
+      sendButton.disabled = true;
+
+      // Show loading indicator
+      showLoading();
+
+      // Send message to API
+      const response = await sendMessage(message);
+
+      // Hide loading indicator
+      hideLoading();
+
+      // Add assistant message
+      const assistantMessage = {
+        role: 'assistant',
+        content: response,
+        timestamp: new Date(),
+      };
+
+      messages.push(assistantMessage);
+      addMessageToUI(assistantMessage);
+
+      // Re-enable form
+      loading = false;
+      sendButton.disabled = false;
+      inputElement.focus();
+    });
+
+    // Handle quick replies
+    quickReplies.forEach(button => {
+      button.addEventListener('click', function () {
+        const message = this.getAttribute('data-message');
+        inputElement.value = message;
+
+        // Trigger form submission
+        const event = new Event('submit', { cancelable: true, bubbles: true });
+        formElement.dispatchEvent(event);
+      });
+    });
+
+    // Handle close button
+    closeButton.addEventListener('click', function () {
+      // Notify parent window to close the widget
+      window.parent.postMessage({ type: 'CLOSE_WIDGET' }, '*');
+    });
+
+    // Focus input on load
+    inputElement.focus();
+  }
 })();

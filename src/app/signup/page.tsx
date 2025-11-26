@@ -2,9 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { signIn } from "next-auth/react";
 import Link from "next/link";
-import { supabase } from "~/lib/supabase";
 import Button from "~/components/ui/Button";
 import Input from "~/components/ui/Input";
 import Card from "~/components/ui/Card";
@@ -24,43 +22,26 @@ export default function SignupPage() {
     setLoading(true);
 
     try {
-      // First, sign up with Supabase
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
+      // Call our custom signup API
+      const response = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password }),
       });
 
-      if (signUpError) {
-        setError(signUpError.message);
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || "Failed to create account");
         setLoading(false);
         return;
       }
 
-      if (data.user) {
-        // If email confirmation is required, show success message
-        if (!data.session) {
-          setSuccess(true);
-          setError("");
-          setLoading(false);
-          return;
-        }
-
-        // If user is automatically signed in, sign in with NextAuth
-        const result = await signIn("credentials", {
-          email,
-          password,
-          redirect: false,
-        });
-
-        if (result?.error) {
-          setError("Account created but sign in failed. Please try logging in.");
-        } else if (result?.ok) {
-          // Wait a bit for session to update, then redirect
-          setTimeout(() => {
-            router.push("/dashboard");
-            router.refresh();
-          }, 100);
-        }
+      if (data.success) {
+        setSuccess(true);
+        setError("");
       } else {
         setError("An unexpected error occurred");
       }

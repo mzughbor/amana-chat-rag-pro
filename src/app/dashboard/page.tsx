@@ -48,13 +48,16 @@ export default function DashboardPage() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to fetch bots");
+        throw new Error(`Failed to fetch bots: ${response.status} ${response.statusText}`);
       }
 
       const botsData = await response.json();
-
+      
+      // Ensure botsData is an array
+      const botsArray = Array.isArray(botsData) ? botsData : [];
+      
       // Transform to bot format
-      const transformedBots = botsData.map((bot: any) => ({
+      const transformedBots = botsArray.map((bot: any) => ({
         id: bot.id,
         name: bot.name,
         welcomeMessage: bot.welcomeMessage || "Hello! How can I help you today?",
@@ -64,6 +67,7 @@ export default function DashboardPage() {
       setBots(transformedBots);
     } catch (error) {
       console.error("Error fetching bots:", error);
+      // Show error message to user
       // Fallback to empty array if there's an error
       setBots([]);
     } finally {

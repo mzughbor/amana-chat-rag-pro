@@ -74,29 +74,36 @@ export async function GET() {
 
         if (sitesError) throw sitesError;
 
-        // Transform to bot format
+        // Transform to bot format - handle both array and object formats
         const bots = sites
-          .filter((site: any) => site.bots && site.bots.length > 0)
-          .map((site: any) => ({
-            id: site.bots[0].id,
-            siteId: site.id,
-            name: site.bots[0].name,
-            welcomeMessage: site.bots[0].welcomeMessage,
-            status: site.bots[0].status,
-            widgetSettings: site.bots[0].widgetSettings || {},
-            createdAt: site.bots[0].createdAt,
-            updatedAt: site.bots[0].updatedAt,
-            site: {
-              id: site.id,
-              name: site.name,
-              domain: site.domain,
-            },
-          }));
+          .map((site: any) => {
+            // Handle case where bots might be an array or single object
+            const siteBots = Array.isArray(site.bots) ? site.bots : (site.bots ? [site.bots] : []);
+            return siteBots.map((bot: any) => ({
+              id: bot.id,
+              siteId: site.id,
+              name: bot.name,
+              welcomeMessage: bot.welcomeMessage,
+              status: bot.status,
+              widgetSettings: bot.widgetSettings || {},
+              createdAt: bot.createdAt,
+              updatedAt: bot.updatedAt,
+              site: {
+                id: site.id,
+                name: site.name,
+                domain: site.domain,
+              },
+            }));
+          })
+          .flat()
+          // Filter out any null or undefined bots
+          .filter((bot: any) => bot && bot.id);
 
         return NextResponse.json(bots);
       } catch (restError: any) {
         console.error("REST API fallback also failed:", restError.message);
-        throw restError;
+        // Return empty array instead of throwing error to prevent dashboard from breaking
+        return NextResponse.json([]);
       }
     }
   } catch (error: any) {

@@ -155,10 +155,13 @@ export async function POST(request: NextRequest) {
           const { data: qaData, error: qaError } = await supabaseRestClient
             .from('qa_pairs')
             .insert({
+              id: crypto.randomUUID(),
               botId: bot.id,
               question: question,
               answer: answer,
-              status: 'active'
+              status: 'active',
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
             })
             .select()
             .single();
