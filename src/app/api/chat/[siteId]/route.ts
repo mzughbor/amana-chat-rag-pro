@@ -24,6 +24,7 @@ export async function POST(
     // Get bot (using raw query to match actual schema)
     let bot: any = null;
     try {
+      // First try to find bot by ID directly
       const bots: any[] = await db.$queryRaw`
         SELECT b.id, b."siteId", b."openaiApiKeyEncrypted", s."apiKeyEncrypted" as "siteApiKeyEncrypted"
         FROM bots b
@@ -34,6 +35,19 @@ export async function POST(
       
       if (bots.length > 0) {
         bot = bots[0];
+      } else {
+        // If not found, try to find bot by siteId
+        const siteBots: any[] = await db.$queryRaw`
+          SELECT b.id, b."siteId", b."openaiApiKeyEncrypted", s."apiKeyEncrypted" as "siteApiKeyEncrypted"
+          FROM bots b
+          LEFT JOIN sites s ON b."siteId" = s.id
+          WHERE b."siteId" = ${siteId}
+          LIMIT 1
+        `;
+        
+        if (siteBots.length > 0) {
+          bot = siteBots[0];
+        }
       }
     } catch (dbError) {
       console.error("Database query failed:", dbError);
@@ -97,7 +111,9 @@ export async function POST(
     const apiKey = decryptApiKey(apiKeyEncrypted, encryptionKey);
 
     // Retrieve relevant context using RAG
-    const relevantChunks = await retrieveContext(message, siteId, apiKey, 5);
+    // Use the bot ID for context retrieval if available, otherwise use site ID
+    const contextId = bot ? bot.id : siteId;
+    const relevantChunks = await retrieveContext(message, contextId, apiKey, 5);
     const context = buildContext(relevantChunks);
 
     // Build prompt with context
@@ -131,7 +147,7 @@ Answer the user's question based on the context above. Be concise and helpful.`;
       const conversations: any[] = await db.$queryRaw`
         SELECT id, messages, "botId", "siteId"
         FROM conversations
-        WHERE COALESCE("botId", "siteId") = ${siteId} AND "visitorId" = ${visitorIdFinal}
+        WHERE COALESCE("botId", "siteId") = ${contextId} AND "visitorId" = ${visitorIdFinal}
         ORDER BY "updatedAt" DESC
         LIMIT 1
       `;
