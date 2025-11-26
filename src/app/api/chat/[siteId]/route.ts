@@ -21,31 +21,66 @@ export async function POST(
       );
     }
 
-    // Get bot (siteId is actually botId in the route, but keeping for backward compatibility)
-    // Try to find by botId first, then by siteId
-    let bot = await db.bot.findUnique({
-      where: { id: siteId },
-      include: { site: true },
-    });
+    // Get bot (using raw query to match actual schema)
+    let bot: any = null;
+    try {
+      const bots: any[] = await db.$queryRaw`
+        SELECT b.id, b."siteId", b."openaiApiKeyEncrypted", s."apiKeyEncrypted" as "siteApiKeyEncrypted"
+        FROM bots b
+        LEFT JOIN sites s ON b."siteId" = s.id
+        WHERE b.id = ${siteId}
+        LIMIT 1
+      `;
+      
+      if (bots.length > 0) {
+        bot = bots[0];
+      }
+    } catch (dbError) {
+      console.error("Database query failed:", dbError);
+      return NextResponse.json(
+        { error: "Database connection failed" },
+        { status: 500 },
+      );
+    }
 
-    // If not found as botId, try finding by siteId
+    // If bot not found, try to get site as fallback (for backward compatibility)
+    let site: any = null;
     if (!bot) {
-      const site = await db.site.findUnique({
-        where: { id: siteId },
-        include: { bot: true },
-      });
-      if (site?.bot) {
-        bot = site.bot;
+      try {
+        const sites: any[] = await db.$queryRaw`
+          SELECT id, "apiKeyEncrypted"
+          FROM sites
+          WHERE id = ${siteId}
+          LIMIT 1
+        `;
+        
+        if (sites.length > 0) {
+          site = sites[0];
+        }
+      } catch (dbError) {
+        console.error("Database query failed:", dbError);
+        return NextResponse.json(
+          { error: "Database connection failed" },
+          { status: 500 },
+        );
       }
     }
 
-    if (!bot) {
-      return NextResponse.json({ error: "Bot not found" }, { status: 404 });
+    if (!bot && !site) {
+      return NextResponse.json({ error: "Bot or site not found" }, { status: 404 });
     }
 
-    if (!bot.openaiApiKeyEncrypted) {
+    // Get API key from bot or site
+    let apiKeyEncrypted = null;
+    if (bot) {
+      apiKeyEncrypted = bot.openaiApiKeyEncrypted;
+    } else if (site) {
+      apiKeyEncrypted = site.apiKeyEncrypted;
+    }
+
+    if (!apiKeyEncrypted) {
       return NextResponse.json(
-        { error: "API key not configured for this bot" },
+        { error: "API key not configured for this bot/site" },
         { status: 400 },
       );
     }
@@ -59,10 +94,10 @@ export async function POST(
       );
     }
 
-    const apiKey = decryptApiKey(bot.openaiApiKeyEncrypted, encryptionKey);
+    const apiKey = decryptApiKey(apiKeyEncrypted, encryptionKey);
 
     // Retrieve relevant context using RAG
-    const relevantChunks = await retrieveContext(message, bot.id, apiKey, 5);
+    const relevantChunks = await retrieveContext(message, siteId, apiKey, 5);
     const context = buildContext(relevantChunks);
 
     // Build prompt with context
@@ -87,47 +122,66 @@ Answer the user's question based on the context above. Be concise and helpful.`;
 
     const response = completion.choices[0]?.message?.content ?? "I'm sorry, I couldn't generate a response.";
 
-    // Log conversation and messages
+    // Log conversation (using raw queries to match actual schema)
+    let conversation: any = null;
     const visitorIdFinal = visitorId ?? crypto.randomUUID();
-    let conversation = await db.conversation.findFirst({
-      where: {
-        botId: bot.id,
-        visitorId: visitorIdFinal,
-      },
-      orderBy: { updatedAt: "desc" },
-    });
+    
+    try {
+      // Try to find existing conversation
+      const conversations: any[] = await db.$queryRaw`
+        SELECT id, messages, "botId", "siteId"
+        FROM conversations
+        WHERE COALESCE("botId", "siteId") = ${siteId} AND "visitorId" = ${visitorIdFinal}
+        ORDER BY "updatedAt" DESC
+        LIMIT 1
+      `;
+      
+      if (conversations.length > 0) {
+        conversation = conversations[0];
+      }
+    } catch (dbError) {
+      console.error("Database query failed:", dbError);
+    }
+
+    // Prepare messages
+    let messages = [];
+    if (conversation && conversation.messages) {
+      try {
+        messages = Array.isArray(conversation.messages) 
+          ? [...conversation.messages] 
+          : JSON.parse(conversation.messages);
+      } catch (parseError) {
+        messages = [];
+      }
+    }
+    
+    messages.push(
+      { role: "user", content: message, timestamp: new Date().toISOString() },
+      { role: "assistant", content: response, timestamp: new Date().toISOString() }
+    );
 
     if (conversation) {
       // Update existing conversation
-      await db.conversation.update({
-        where: { id: conversation.id },
-        data: { updatedAt: new Date() },
-      });
+      try {
+        await db.$executeRaw`
+          UPDATE conversations
+          SET messages = ${JSON.stringify(messages)}, "updatedAt" = NOW()
+          WHERE id = ${conversation.id}
+        `;
+      } catch (updateError) {
+        console.error("Failed to update conversation:", updateError);
+      }
     } else {
       // Create new conversation
-      conversation = await db.conversation.create({
-        data: {
-          botId: bot.id,
-          visitorId: visitorIdFinal,
-        },
-      });
+      try {
+        await db.$executeRaw`
+          INSERT INTO conversations (id, "botId", "siteId", "visitorId", messages, "createdAt", "updatedAt")
+          VALUES (${crypto.randomUUID()}, ${bot ? bot.id : null}, ${site ? site.id : null}, ${visitorIdFinal}, ${JSON.stringify(messages)}, NOW(), NOW())
+        `;
+      } catch (insertError) {
+        console.error("Failed to create conversation:", insertError);
+      }
     }
-
-    // Create message records
-    await db.message.createMany({
-      data: [
-        {
-          conversationId: conversation.id,
-          role: "user",
-          content: message,
-        },
-        {
-          conversationId: conversation.id,
-          role: "assistant",
-          content: response,
-        },
-      ],
-    });
 
     return NextResponse.json({
       response,
