@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "~/server/auth";
 import { db } from "~/lib/db";
+import { supabaseRestClient } from "~/lib/supabaseRestClient";
 
 export async function GET(
   request: NextRequest,
@@ -20,8 +21,9 @@ export async function GET(
       return NextResponse.json({ error: "Bot ID is required" }, { status: 400 });
     }
 
-    // Check if bot belongs to user (using raw query)
+    // Check if bot belongs to user (using raw query with REST API fallback)
     let bot: any = null;
+    let useRestApi = false;
     try {
       const bots: any[] = await db.$queryRaw`
         SELECT b.id, b."widgetSettings", b."scriptEmbedId", s."userId"
@@ -34,12 +36,30 @@ export async function GET(
       if (bots.length > 0) {
         bot = bots[0];
       }
-    } catch (dbError) {
-      console.error("Database query failed:", dbError);
-      return NextResponse.json(
-        { error: "Database connection failed" },
-        { status: 500 },
-      );
+    } catch (dbError: any) {
+      console.warn("Database query failed, falling back to REST API:", dbError.message);
+      useRestApi = true;
+      
+      // Try REST API fallback
+      try {
+        const { data: bots, error: restError } = await supabaseRestClient
+          .from('bots')
+          .select('id, widgetSettings, scriptEmbedId, sites(userId)')
+          .eq('id', botId)
+          .eq('sites.userId', session.user.id)
+          .limit(1)
+          .single();
+        
+        if (!restError && bots) {
+          bot = bots;
+        }
+      } catch (restError: any) {
+        console.error("REST API fallback also failed:", restError.message);
+        return NextResponse.json(
+          { error: "Service unavailable. Please try again later." },
+          { status: 503 },
+        );
+      }
     }
 
     if (!bot) {
@@ -82,8 +102,9 @@ export async function PUT(
       return NextResponse.json({ error: "Widget settings are required" }, { status: 400 });
     }
 
-    // Check if bot belongs to user (using raw query)
+    // Check if bot belongs to user (using raw query with REST API fallback)
     let bot: any = null;
+    let useRestApi = false;
     try {
       const bots: any[] = await db.$queryRaw`
         SELECT b.id, s."userId"
@@ -96,42 +117,76 @@ export async function PUT(
       if (bots.length > 0) {
         bot = bots[0];
       }
-    } catch (dbError) {
-      console.error("Database query failed:", dbError);
-      return NextResponse.json(
-        { error: "Database connection failed" },
-        { status: 500 },
-      );
+    } catch (dbError: any) {
+      console.warn("Database query failed, falling back to REST API:", dbError.message);
+      useRestApi = true;
+      
+      // Try REST API fallback
+      try {
+        const { data: bots, error: restError } = await supabaseRestClient
+          .from('bots')
+          .select('id, sites(userId)')
+          .eq('id', botId)
+          .eq('sites.userId', session.user.id)
+          .limit(1)
+          .single();
+        
+        if (!restError && bots) {
+          bot = bots;
+        }
+      } catch (restError: any) {
+        console.error("REST API fallback also failed:", restError.message);
+        return NextResponse.json(
+          { error: "Service unavailable. Please try again later." },
+          { status: 503 },
+        );
+      }
     }
 
     if (!bot) {
       return NextResponse.json({ error: "Bot not found or unauthorized" }, { status: 404 });
     }
 
-    // Update widget settings (using raw query)
+    // Update widget settings (using raw query with REST API fallback)
     let updatedBot: any = null;
     try {
-      await db.$executeRaw`
-        UPDATE bots
-        SET "widgetSettings" = ${JSON.stringify(widgetSettings)}, "updatedAt" = NOW()
-        WHERE id = ${botId}
-      `;
-      
-      // Fetch updated bot
-      const updatedBots: any[] = await db.$queryRaw`
-        SELECT *
-        FROM bots
-        WHERE id = ${botId}
-      `;
-      
-      if (updatedBots.length > 0) {
-        updatedBot = updatedBots[0];
+      if (!useRestApi) {
+        await db.$executeRaw`
+          UPDATE bots
+          SET "widgetSettings" = ${JSON.stringify(widgetSettings)}, "updatedAt" = NOW()
+          WHERE id = ${botId}
+        `;
+        
+        // Fetch updated bot
+        const updatedBots: any[] = await db.$queryRaw`
+          SELECT *
+          FROM bots
+          WHERE id = ${botId}
+        `;
+        
+        if (updatedBots.length > 0) {
+          updatedBot = updatedBots[0];
+        }
+      } else {
+        // Use REST API for update
+        const { data: updatedData, error: updateError } = await supabaseRestClient
+          .from('bots')
+          .update({
+            widgetSettings: widgetSettings,
+            updatedAt: new Date().toISOString()
+          })
+          .eq('id', botId)
+          .select()
+          .single();
+        
+        if (updateError) throw updateError;
+        updatedBot = updatedData;
       }
-    } catch (updateError) {
-      console.error("Database update failed:", updateError);
+    } catch (updateError: any) {
+      console.error("Database update failed:", updateError.message);
       return NextResponse.json(
-        { error: "Database update failed" },
-        { status: 500 },
+        { error: "Failed to update widget settings. Please try again later." },
+        { status: 503 },
       );
     }
 
@@ -144,4 +199,3 @@ export async function PUT(
     );
   }
 }
-
