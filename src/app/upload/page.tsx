@@ -11,58 +11,98 @@ export default async function UploadPage() {
     redirect("/login");
   }
 
-  // Try to get site from database first, fallback to REST API
-  let siteData: any = null;
-  let botId: string | null = null;
+  // Try to get sites with bots from database first, fallback to REST API
+  let sitesData: any[] = [];
+  let botsData: any[] = [];
   
   try {
-    console.log("Attempting to fetch site from database for user:", session.user.id);
-    // Use raw query to avoid typing issues
+    console.log("Attempting to fetch sites and bots from database for user:", session.user.id);
+    // Use raw query to get all sites and their bots for the user
     const sites: any[] = await db.$queryRaw`
-      SELECT s.id, s."userId", s.name, b.id as "botId"
+      SELECT s.id as "siteId", s.name as "siteName", s."userId", b.id as "botId", b.name as "botName"
       FROM sites s
       LEFT JOIN bots b ON s.id = b."siteId"
       WHERE s."userId" = ${session.user.id}
-      LIMIT 1
+      ORDER BY s."createdAt" DESC
     `;
     
-    if (sites.length > 0 && sites[0].botId) {
-      siteData = sites[0];
-      botId = sites[0].botId;
-      console.log("Successfully fetched site from database:", sites[0].id);
-    }
+    // Group by site
+    const sitesMap: Record<string, any> = {};
+    sites.forEach(site => {
+      if (!sitesMap[site.siteId]) {
+        sitesMap[site.siteId] = {
+          id: site.siteId,
+          name: site.siteName,
+          userId: site.userId,
+          bots: []
+        };
+      }
+      if (site.botId) {
+        sitesMap[site.siteId].bots.push({
+          id: site.botId,
+          name: site.botName,
+          siteId: site.siteId
+        });
+      }
+    });
+    
+    sitesData = Object.values(sitesMap);
+    
+    // Flatten bots for easy selection
+    botsData = sites.flatMap(site => 
+      site.botId ? [{
+        id: site.botId,
+        name: site.botName || `${site.siteName} Bot`,
+        siteId: site.siteId
+      }] : []
+    );
+    
+    console.log("Successfully fetched sites and bots from database:", sitesData.length, "sites,", botsData.length, "bots");
   } catch (dbError: any) {
     // If database connection fails, fallback to REST API
     console.warn("Database connection failed, falling back to REST API:", dbError.message);
     
     try {
-      console.log("Attempting to fetch site via REST API for user:", session.user.id);
+      console.log("Attempting to fetch sites via REST API for user:", session.user.id);
+      // For REST API, we need to make separate calls or use the existing function
+      // Let's try to get sites with bots using the existing function and adapt
       const site = await getSiteByUserId(session.user.id);
       
       if (site) {
-        siteData = site;
-        // For REST API, the bot is nested in the response as 'bots' (plural)
-        // Handle both object and array cases generically
-        const botData = (site as any).bots;
-        if (Array.isArray(botData) && botData.length > 0) {
-          botId = botData[0].id || null;
-        } else if (botData && typeof botData === 'object' && botData.id) {
-          botId = botData.id || null;
-        }
+        sitesData = [{
+          id: site.id,
+          name: site.name,
+          userId: site.userId,
+          bots: Array.isArray(site.bots) ? site.bots : (site.bots ? [site.bots] : [])
+        }];
+        
+        // Flatten bots for easy selection
+        botsData = sitesData[0].bots.map((bot: any) => ({
+          id: bot.id,
+          name: bot.name || `${site.name} Bot`,
+          siteId: site.id
+        }));
+        
         console.log("Successfully fetched site via REST API:", site.id);
       }
     } catch (restError: any) {
       console.error("REST API fallback also failed:", restError);
-      throw new Error(`Failed to fetch site: ${restError.message || restError}`);
+      // Don't throw error, just continue with empty arrays
+      sitesData = [];
+      botsData = [];
     }
   }
 
-  if (!siteData || !botId) {
-    console.log("No site or bot found, redirecting to dashboard");
+  // If no bots exist, redirect to dashboard to create one
+  if (botsData.length === 0) {
+    console.log("No bots found, redirecting to dashboard");
     redirect("/dashboard");
   }
 
-  // Fetch documents - use raw SQL to handle both old and new schema
+  // Use the first bot by default for backward compatibility
+  const defaultBotId = botsData[0].id;
+  
+  // Fetch documents for the default bot - use raw SQL to handle both old and new schema
   let documents: any[] = [];
   try {
     // Try new schema first (botId, fileName, ingestionStatus)
@@ -74,13 +114,14 @@ export default async function UploadPage() {
         "errorMessage",
         "createdAt"
       FROM documents
-      WHERE "botId" = ${botId}
+      WHERE "botId" = ${defaultBotId}
       ORDER BY "createdAt" DESC
     `;
     documents = newDocs;
   } catch (error: any) {
     // Fallback to old schema (siteId, filename, status)
     try {
+      const siteId = botsData[0].siteId;
       const oldDocs = await db.$queryRaw<any[]>`
         SELECT 
           id,
@@ -89,7 +130,7 @@ export default async function UploadPage() {
           "errorMessage",
           "createdAt"
         FROM documents
-        WHERE "siteId" = ${siteData.id}
+        WHERE "siteId" = ${siteId}
         ORDER BY "createdAt" DESC
       `;
       documents = oldDocs;
@@ -108,24 +149,25 @@ export default async function UploadPage() {
     createdAt: doc.createdAt,
   }));
 
-  // Fetch QAPairs - use raw SQL to handle both old and new schema
+  // Fetch QAPairs for the default bot - use raw SQL to handle both old and new schema
   let qaPairs: any[] = [];
   try {
     // Try new schema first (botId)
     const newQAs = await db.$queryRaw<any[]>`
       SELECT id, question, answer, "createdAt"
       FROM qa_pairs
-      WHERE "botId" = ${botId}
+      WHERE "botId" = ${defaultBotId}
       ORDER BY "createdAt" DESC
     `;
     qaPairs = newQAs;
   } catch (error: any) {
     // Fallback to old schema (siteId)
     try {
+      const siteId = botsData[0].siteId;
       const oldQAs = await db.$queryRaw<any[]>`
         SELECT id, question, answer, "createdAt"
         FROM qa_pairs
-        WHERE "siteId" = ${siteData.id}
+        WHERE "siteId" = ${siteId}
         ORDER BY "createdAt" DESC
       `;
       qaPairs = oldQAs;
@@ -135,5 +177,11 @@ export default async function UploadPage() {
     }
   }
 
-  return <UploadContent botId={botId} documents={documents} qaPairs={qaPairs} />;
+  return <UploadContent 
+    botId={defaultBotId} 
+    documents={documents} 
+    qaPairs={qaPairs} 
+    sites={sitesData}
+    bots={botsData}
+  />;
 }

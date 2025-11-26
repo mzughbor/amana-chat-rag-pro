@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 
 interface Document {
@@ -18,15 +18,35 @@ interface QAPair {
   createdAt: Date;
 }
 
+interface Bot {
+  id: string;
+  name: string;
+  siteId: string;
+}
+
+interface Site {
+  id: string;
+  name: string;
+  userId: string;
+  bots: Bot[];
+}
+
 export default function UploadContent({
-  botId,
-  documents,
-  qaPairs,
+  botId: initialBotId,
+  documents: initialDocuments,
+  qaPairs: initialQaPairs,
+  sites,
+  bots,
 }: {
   botId: string;
   documents: Document[];
   qaPairs: QAPair[];
+  sites: Site[];
+  bots: Bot[];
 }) {
+  const [botId, setBotId] = useState(initialBotId);
+  const [documents, setDocuments] = useState(initialDocuments);
+  const [qaPairs, setQaPairs] = useState(initialQaPairs);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [uploadProgress, setUploadProgress] = useState("");
@@ -39,6 +59,24 @@ export default function UploadContent({
   const [editQuestion, setEditQuestion] = useState("");
   const [editAnswer, setEditAnswer] = useState("");
   const [deletingQaId, setDeletingQaId] = useState<string | null>(null);
+
+  // Update data when bot selection changes
+  useEffect(() => {
+    if (botId !== initialBotId) {
+      // In a real implementation, we would fetch new data for the selected bot
+      // For now, we'll just clear the current data
+      setDocuments([]);
+      setQaPairs([]);
+    }
+  }, [botId, initialBotId]);
+
+  const handleBotChange = (newBotId: string) => {
+    setBotId(newBotId);
+    // In a real implementation, we would fetch data for the new bot
+    // For now, we'll just clear the current data
+    setDocuments([]);
+    setQaPairs([]);
+  };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -65,6 +103,8 @@ export default function UploadContent({
 
     const formData = new FormData();
     formData.append("file", file);
+    // Add botId to form data
+    formData.append("botId", botId);
 
     try {
       const response = await fetch("/api/content/upload", {
@@ -141,7 +181,7 @@ export default function UploadContent({
       const response = await fetch("/api/content/qa", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: qaId, question: editQuestion, answer: editAnswer }),
+        body: JSON.stringify({ id: qaId, question: editQuestion, answer: editAnswer, botId }),
       });
 
       const data = await response.json();
@@ -175,7 +215,7 @@ export default function UploadContent({
       const response = await fetch("/api/content/qa", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: qaId }),
+        body: JSON.stringify({ id: qaId, botId }),
       });
 
       const data = await response.json();
@@ -201,6 +241,10 @@ export default function UploadContent({
     try {
       const response = await fetch(`/api/content/documents/${docId}`, {
         method: "DELETE",
+        headers: { 
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ botId }),
       });
 
       const data = await response.json();
@@ -224,7 +268,7 @@ export default function UploadContent({
       const response = await fetch("/api/content/qa", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question, answer }),
+        body: JSON.stringify({ question, answer, botId }),
       });
 
       const data = await response.json();
@@ -264,10 +308,35 @@ export default function UploadContent({
       </div>
 
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <h1 className="text-2xl font-bold text-gray-900">Content Upload</h1>
-        <p className="mt-1 text-sm text-gray-600">
-          Upload PDF documents or add Q&A pairs to train your chatbot
-        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Content Upload</h1>
+            <p className="mt-1 text-sm text-gray-600">
+              Upload PDF documents or add Q&A pairs to train your chatbot
+            </p>
+          </div>
+          
+          {/* Bot Selection Dropdown */}
+          {bots.length > 1 && (
+            <div className="flex items-center space-x-2">
+              <label htmlFor="bot-select" className="text-sm font-medium text-gray-700">
+                Select Bot:
+              </label>
+              <select
+                id="bot-select"
+                value={botId}
+                onChange={(e) => handleBotChange(e.target.value)}
+                className="rounded-md border border-gray-300 bg-white py-2 px-3 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                {bots.map((bot) => (
+                  <option key={bot.id} value={bot.id}>
+                    {bot.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
 
         <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-2">
           {/* PDF Upload */}
@@ -640,4 +709,3 @@ export default function UploadContent({
     </div>
   );
 }
-

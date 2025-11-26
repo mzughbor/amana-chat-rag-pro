@@ -20,49 +20,115 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Parse form data
+    const formData = await request.formData();
+    const file = formData.get("file") as File | null;
+    const botId = formData.get("botId") as string | null;
+
+    if (!file) {
+      return NextResponse.json({ error: "No file provided" }, { status: 400 });
+    }
+
+    // Validate file type
+    if (file.type !== "application/pdf") {
+      return NextResponse.json(
+        { error: "Only PDF files are supported" },
+        { status: 400 },
+      );
+    }
+
+    // Validate file size
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { error: "File size exceeds 10MB limit" },
+        { status: 400 },
+      );
+    }
+
     // Get user's bot (using raw query to avoid Prisma schema issues, with REST API fallback)
     let bot: any = null;
     let useRestApi = false;
-    try {
-      const bots: any[] = await db.$queryRaw`
-        SELECT b.id, b."siteId", b.name, b."openaiApiKeyEncrypted", s."userId"
-        FROM bots b
-        JOIN sites s ON b."siteId" = s.id
-        WHERE s."userId" = ${session.user.id}
-        LIMIT 1
-      `;
-      
-      if (bots.length > 0) {
-        bot = bots[0];
-      }
-    } catch (dbError) {
-      console.warn("Database connection failed, falling back to REST API:", dbError.message);
-      useRestApi = true;
-      
-      // Fallback to REST API
+    
+    // If botId is provided, use it directly
+    if (botId) {
       try {
-        const { data: sites, error: siteError } = await supabaseRestClient
-          .from('sites')
-          .select('id, userId, bots(id, siteId, name, openaiApiKeyEncrypted)')
-          .eq('userId', session.user.id)
-          .limit(1)
-          .single();
+        const bots: any[] = await db.$queryRaw`
+          SELECT b.id, b."siteId", b.name, b."openaiApiKeyEncrypted", s."userId"
+          FROM bots b
+          JOIN sites s ON b."siteId" = s.id
+          WHERE b.id = ${botId} AND s."userId" = ${session.user.id}
+          LIMIT 1
+        `;
         
-        if (!siteError && sites && sites.bots && sites.bots.length > 0) {
-          bot = {
-            id: sites.bots[0].id,
-            siteId: sites.bots[0].siteId,
-            name: sites.bots[0].name,
-            openaiApiKeyEncrypted: sites.bots[0].openaiApiKeyEncrypted,
-            userId: sites.userId
-          };
+        if (bots.length > 0) {
+          bot = bots[0];
         }
-      } catch (restError) {
-        console.error("REST API fallback also failed:", restError);
-        return NextResponse.json(
-          { error: "Database connection failed" },
-          { status: 500 },
-        );
+      } catch (dbError: any) {
+        console.warn("Database connection failed, falling back to REST API:", dbError.message);
+        useRestApi = true;
+        
+        // Fallback to REST API
+        try {
+          const { data: botData, error: botError } = await supabaseRestClient
+            .from('bots')
+            .select('id, siteId, name, openaiApiKeyEncrypted, sites(userId)')
+            .eq('id', botId)
+            .eq('sites.userId', session.user.id)
+            .limit(1)
+            .single();
+          
+          if (!botError && botData) {
+            bot = {
+              id: botData.id,
+              siteId: botData.siteId,
+              name: botData.name,
+              openaiApiKeyEncrypted: botData.openaiApiKeyEncrypted,
+              userId: session.user.id // We know this is the correct user since we filtered by userId
+            };
+          }
+        } catch (restError: any) {
+          console.error("REST API fallback also failed:", restError);
+        }
+      }
+    } else {
+      // If no botId provided, try to get the first bot for the user
+      try {
+        const bots: any[] = await db.$queryRaw`
+          SELECT b.id, b."siteId", b.name, b."openaiApiKeyEncrypted", s."userId"
+          FROM bots b
+          JOIN sites s ON b."siteId" = s.id
+          WHERE s."userId" = ${session.user.id}
+          LIMIT 1
+        `;
+        
+        if (bots.length > 0) {
+          bot = bots[0];
+        }
+      } catch (dbError: any) {
+        console.warn("Database connection failed, falling back to REST API:", dbError.message);
+        useRestApi = true;
+        
+        // Fallback to REST API
+        try {
+          const { data: sites, error: siteError } = await supabaseRestClient
+            .from('sites')
+            .select('id, userId, bots(id, siteId, name, openaiApiKeyEncrypted)')
+            .eq('userId', session.user.id)
+            .limit(1)
+            .single();
+          
+          if (!siteError && sites && sites.bots && sites.bots.length > 0) {
+            bot = {
+              id: sites.bots[0].id,
+              siteId: sites.bots[0].siteId,
+              name: sites.bots[0].name,
+              openaiApiKeyEncrypted: sites.bots[0].openaiApiKeyEncrypted,
+              userId: sites.userId
+            };
+          }
+        } catch (restError: any) {
+          console.error("REST API fallback also failed:", restError);
+        }
       }
     }
 
@@ -90,30 +156,6 @@ export async function POST(request: NextRequest) {
     }
 
     const apiKey = decryptApiKey(bot.openaiApiKeyEncrypted, encryptionKey);
-
-    // Parse form data
-    const formData = await request.formData();
-    const file = formData.get("file") as File | null;
-
-    if (!file) {
-      return NextResponse.json({ error: "No file provided" }, { status: 400 });
-    }
-
-    // Validate file type
-    if (file.type !== "application/pdf") {
-      return NextResponse.json(
-        { error: "Only PDF files are supported" },
-        { status: 400 },
-      );
-    }
-
-    // Validate file size
-    if (file.size > MAX_FILE_SIZE) {
-      return NextResponse.json(
-        { error: "File size exceeds 10MB limit" },
-        { status: 400 },
-      );
-    }
 
     // Convert file to buffer
     const arrayBuffer = await file.arrayBuffer();
