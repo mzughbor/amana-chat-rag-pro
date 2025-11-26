@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "~/lib/db";
 import { retrieveContext, buildContext } from "~/server/services/ragService";
 import { decryptApiKey } from "~/server/services/encryption";
+import { supabaseRestClient } from "~/lib/supabaseRestClient";
 import OpenAI from "openai";
 import crypto from "crypto";
 
@@ -21,8 +22,10 @@ export async function POST(
       );
     }
 
-    // Get bot (using raw query to match actual schema)
+    // Get bot (using raw query to match actual schema, with REST API fallback)
     let bot: any = null;
+    let useRestApi = false;
+    
     try {
       // First try to find bot by ID directly
       const bots: any[] = await db.$queryRaw`
@@ -50,11 +53,41 @@ export async function POST(
         }
       }
     } catch (dbError) {
-      console.error("Database query failed:", dbError);
-      return NextResponse.json(
-        { error: "Database connection failed" },
-        { status: 500 },
-      );
+      console.warn("Database connection failed, falling back to REST API:", dbError.message);
+      useRestApi = true;
+      
+      // Fallback to REST API
+      try {
+        // Try to find bot by ID directly
+        const { data: botData, error: botError } = await supabaseRestClient
+          .from('bots')
+          .select('id, siteId, openaiApiKeyEncrypted')
+          .eq('id', siteId)
+          .limit(1)
+          .single();
+        
+        if (botError) {
+          // If not found, try to find bot by siteId
+          const { data: siteBotData, error: siteBotError } = await supabaseRestClient
+            .from('bots')
+            .select('id, siteId, openaiApiKeyEncrypted')
+            .eq('siteId', siteId)
+            .limit(1)
+            .single();
+          
+          if (!siteBotError && siteBotData) {
+            bot = siteBotData;
+          }
+        } else if (botData) {
+          bot = botData;
+        }
+      } catch (restError) {
+        console.error("REST API fallback also failed:", restError);
+        return NextResponse.json(
+          { error: "Database connection failed" },
+          { status: 500 },
+        );
+      }
     }
 
     // If bot not found, try to get site as fallback (for backward compatibility)
@@ -72,11 +105,29 @@ export async function POST(
           site = sites[0];
         }
       } catch (dbError) {
-        console.error("Database query failed:", dbError);
-        return NextResponse.json(
-          { error: "Database connection failed" },
-          { status: 500 },
-        );
+        if (useRestApi) {
+          // Already using REST API, so try REST API for site too
+          try {
+            const { data: siteData, error: siteError } = await supabaseRestClient
+              .from('sites')
+              .select('id, apiKeyEncrypted')
+              .eq('id', siteId)
+              .limit(1)
+              .single();
+            
+            if (!siteError && siteData) {
+              site = siteData;
+            }
+          } catch (restError) {
+            console.error("REST API fallback for site also failed:", restError);
+          }
+        } else {
+          console.error("Database query failed:", dbError);
+          return NextResponse.json(
+            { error: "Database connection failed" },
+            { status: 500 },
+          );
+        }
       }
     }
 
@@ -138,7 +189,7 @@ Answer the user's question based on the context above. Be concise and helpful.`;
 
     const response = completion.choices[0]?.message?.content ?? "I'm sorry, I couldn't generate a response.";
 
-    // Log conversation (using raw queries to match actual schema)
+    // Log conversation (using raw queries to match actual schema, with REST API fallback)
     let conversation: any = null;
     const visitorIdFinal = visitorId ?? crypto.randomUUID();
     
@@ -156,7 +207,12 @@ Answer the user's question based on the context above. Be concise and helpful.`;
         conversation = conversations[0];
       }
     } catch (dbError) {
-      console.error("Database query failed:", dbError);
+      if (useRestApi) {
+        // Try REST API for conversation
+        console.warn("Database connection failed for conversation lookup, REST API fallback not implemented for this operation");
+      } else {
+        console.error("Database query failed:", dbError);
+      }
     }
 
     // Prepare messages
@@ -185,7 +241,11 @@ Answer the user's question based on the context above. Be concise and helpful.`;
           WHERE id = ${conversation.id}
         `;
       } catch (updateError) {
-        console.error("Failed to update conversation:", updateError);
+        if (useRestApi) {
+          console.warn("Database update failed, REST API fallback not implemented for this operation");
+        } else {
+          console.error("Failed to update conversation:", updateError);
+        }
       }
     } else {
       // Create new conversation
@@ -195,7 +255,11 @@ Answer the user's question based on the context above. Be concise and helpful.`;
           VALUES (${crypto.randomUUID()}, ${bot ? bot.id : null}, ${site ? site.id : null}, ${visitorIdFinal}, ${JSON.stringify(messages)}, NOW(), NOW())
         `;
       } catch (insertError) {
-        console.error("Failed to create conversation:", insertError);
+        if (useRestApi) {
+          console.warn("Database insert failed, REST API fallback not implemented for this operation");
+        } else {
+          console.error("Failed to create conversation:", insertError);
+        }
       }
     }
 
