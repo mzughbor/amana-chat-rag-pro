@@ -12,6 +12,7 @@ import { supabaseAdmin } from "~/lib/supabase";
 import { getToken } from "next-auth/jwt";
 import { cookies, headers } from "next/headers";
 import { type Session } from "next-auth";
+import { supabaseRestClient } from "~/lib/supabaseRestClient";
 
 declare module "next-auth" {
   interface Session extends DefaultSession {
@@ -24,6 +25,43 @@ declare module "next-auth" {
 declare module "next-auth/jwt" {
   interface JWT extends DefaultJWT {
     id: string;
+  }
+}
+
+// Helper function to get or create user via REST API as fallback
+async function getUserOrCreateViaRest(email: string, name?: string | null, image?: string | null) {
+  try {
+    // First try to get the user
+    const { data: userData, error: userError } = await supabaseRestClient
+      .from('users')
+      .select('*')
+      .eq('email', email)
+      .single();
+
+    if (userError && userError.code !== 'PGRST116') { // PGRST116 means no rows returned
+      throw userError;
+    }
+
+    if (userData) {
+      return userData;
+    }
+
+    // If user doesn't exist, create them
+    const { data: newUser, error: createError } = await supabaseRestClient
+      .from('users')
+      .insert({
+        email,
+        name: name || null,
+        image: image || null,
+      })
+      .select()
+      .single();
+
+    if (createError) throw createError;
+    return newUser;
+  } catch (error) {
+    console.error("Error getting or creating user via REST API:", error);
+    throw error;
   }
 }
 
@@ -97,15 +135,33 @@ export const authOptions: NextAuthOptions = {
             });
           }
         } catch (dbError: any) {
-          // Handle database connection errors
+          // Handle database connection errors with REST API fallback
           if (dbError.code === "P1001" || dbError.code === "P1000") {
-            console.error("Database connection error during authentication:", dbError.message);
-            throw new Error(
-              "Database connection failed. Please check your DATABASE_URL in .env file. " +
-              "See terminal for detailed error message."
-            );
+            console.warn("Database connection failed, falling back to REST API:", dbError.message);
+            
+            try {
+              const restUser = await getUserOrCreateViaRest(
+                data.user.email!,
+                data.user.user_metadata?.name ?? null,
+                data.user.user_metadata?.avatar_url ?? null
+              );
+              
+              user = {
+                id: restUser.id,
+                email: restUser.email,
+                name: restUser.name,
+                image: restUser.image,
+              };
+            } catch (restError: any) {
+              console.error("REST API fallback also failed:", restError.message);
+              throw new Error(
+                "Database connection failed and REST API fallback failed. Please check your DATABASE_URL in .env file. " +
+                "See terminal for detailed error message."
+              );
+            }
+          } else {
+            throw dbError;
           }
-          throw dbError;
         }
 
         return {
@@ -157,10 +213,40 @@ export async function getServerAuthSession(): Promise<Session | null> {
       return null;
     }
 
-    // Get user from database
-    const user = await db.user.findUnique({
-      where: { email: token.email as string },
-    });
+    // Get user from database with fallback to REST API
+    let user;
+    try {
+      user = await db.user.findUnique({
+        where: { email: token.email as string },
+      });
+    } catch (dbError: any) {
+      // Handle database connection errors with REST API fallback
+      if (dbError.code === "P1001" || dbError.code === "P1000") {
+        console.warn("Database connection failed, falling back to REST API:", dbError.message);
+        
+        try {
+          const { data: restUser, error: restError } = await supabaseRestClient
+            .from('users')
+            .select('*')
+            .eq('email', token.email)
+            .single();
+
+          if (restError) throw restError;
+          
+          user = {
+            id: restUser.id,
+            email: restUser.email,
+            name: restUser.name,
+            image: restUser.image,
+          };
+        } catch (restError: any) {
+          console.error("REST API fallback also failed:", restError.message);
+          throw new Error("Failed to fetch user data");
+        }
+      } else {
+        throw dbError;
+      }
+    }
 
     if (!user) {
       return null;
@@ -220,10 +306,40 @@ export async function getServerAuthSessionFromRequest(
       return null;
     }
 
-    // Get user from database
-    const user = await db.user.findUnique({
-      where: { email: token.email as string },
-    });
+    // Get user from database with fallback to REST API
+    let user;
+    try {
+      user = await db.user.findUnique({
+        where: { email: token.email as string },
+      });
+    } catch (dbError: any) {
+      // Handle database connection errors with REST API fallback
+      if (dbError.code === "P1001" || dbError.code === "P1000") {
+        console.warn("Database connection failed, falling back to REST API:", dbError.message);
+        
+        try {
+          const { data: restUser, error: restError } = await supabaseRestClient
+            .from('users')
+            .select('*')
+            .eq('email', token.email)
+            .single();
+
+          if (restError) throw restError;
+          
+          user = {
+            id: restUser.id,
+            email: restUser.email,
+            name: restUser.name,
+            image: restUser.image,
+          };
+        } catch (restError: any) {
+          console.error("REST API fallback also failed:", restError.message);
+          throw new Error("Failed to fetch user data");
+        }
+      } else {
+        throw dbError;
+      }
+    }
 
     if (!user) {
       return null;
@@ -243,4 +359,3 @@ export async function getServerAuthSessionFromRequest(
     return null;
   }
 }
-
