@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerAuthSessionFromRequest } from "~/server/auth";
 import { db } from "~/lib/db";
 import { supabaseAdmin } from "~/lib/supabase";
+import { supabaseRestClient } from "~/lib/supabaseRestClient";
 import { processPDF } from "~/server/services/documentProcessor";
 import { generateEmbeddings } from "~/server/services/embeddingService";
 import { encryptApiKey, decryptApiKey } from "~/server/services/encryption";
@@ -19,8 +20,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get user's bot (using raw query to avoid Prisma schema issues)
+    // Get user's bot (using raw query to avoid Prisma schema issues, with REST API fallback)
     let bot: any = null;
+    let useRestApi = false;
     try {
       const bots: any[] = await db.$queryRaw`
         SELECT b.id, b."siteId", b.name, b."openaiApiKeyEncrypted", s."userId"
@@ -34,11 +36,34 @@ export async function POST(request: NextRequest) {
         bot = bots[0];
       }
     } catch (dbError) {
-      console.error("Database query failed:", dbError);
-      return NextResponse.json(
-        { error: "Database connection failed" },
-        { status: 500 },
-      );
+      console.warn("Database connection failed, falling back to REST API:", dbError.message);
+      useRestApi = true;
+      
+      // Fallback to REST API
+      try {
+        const { data: sites, error: siteError } = await supabaseRestClient
+          .from('sites')
+          .select('id, userId, bots(id, siteId, name, openaiApiKeyEncrypted)')
+          .eq('userId', session.user.id)
+          .limit(1)
+          .single();
+        
+        if (!siteError && sites && sites.bots && sites.bots.length > 0) {
+          bot = {
+            id: sites.bots[0].id,
+            siteId: sites.bots[0].siteId,
+            name: sites.bots[0].name,
+            openaiApiKeyEncrypted: sites.bots[0].openaiApiKeyEncrypted,
+            userId: sites.userId
+          };
+        }
+      } catch (restError) {
+        console.error("REST API fallback also failed:", restError);
+        return NextResponse.json(
+          { error: "Database connection failed" },
+          { status: 500 },
+        );
+      }
     }
 
     if (!bot) {
@@ -94,7 +119,7 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Create document record (using raw query to match actual schema)
+    // Create document record (using raw query to match actual schema, with REST API fallback)
     let document: any = null;
     try {
       const documents: any[] = await db.$queryRaw`
@@ -107,11 +132,43 @@ export async function POST(request: NextRequest) {
         document = documents[0];
       }
     } catch (insertError) {
-      console.error("Failed to create document record:", insertError);
-      return NextResponse.json(
-        { error: "Failed to create document record" },
-        { status: 500 },
-      );
+      if (useRestApi) {
+        // Try REST API for document creation
+        try {
+          const { data: docData, error: docError } = await supabaseRestClient
+            .from('documents')
+            .insert({
+              botId: bot.id,
+              sourceType: 'pdf',
+              fileName: file.name,
+              fileType: file.type,
+              fileSize: file.size,
+              storagePath: '',
+              status: 'processing',
+              metadata: {}
+            })
+            .select()
+            .single();
+          
+          if (!docError && docData) {
+            document = docData;
+          } else {
+            throw new Error(docError?.message || "Failed to create document via REST API");
+          }
+        } catch (restInsertError) {
+          console.error("REST API document creation also failed:", restInsertError);
+          return NextResponse.json(
+            { error: "Failed to create document record" },
+            { status: 500 },
+          );
+        }
+      } else {
+        console.error("Failed to create document record:", insertError);
+        return NextResponse.json(
+          { error: "Failed to create document record" },
+          { status: 500 },
+        );
+      }
     }
 
     try {
@@ -145,10 +202,27 @@ export async function POST(request: NextRequest) {
 
         if (storageSuccess) {
           // Update document with storage path only if upload succeeded
-          await db.document.update({
-            where: { id: document.id },
-            data: { storagePath: filePath },
-          });
+          if (!useRestApi) {
+            try {
+              await db.$executeRaw`
+                UPDATE documents 
+                SET "storagePath" = ${filePath}, "updatedAt" = NOW()
+                WHERE id = ${document.id}
+              `;
+            } catch (updateError) {
+              console.warn("Failed to update document storage path:", updateError);
+            }
+          } else {
+            // Use REST API for update
+            try {
+              await supabaseRestClient
+                .from('documents')
+                .update({ storagePath: filePath })
+                .eq('id', document.id);
+            } catch (restUpdateError) {
+              console.warn("Failed to update document storage path via REST API:", restUpdateError);
+            }
+          }
         }
       } catch (storageError) {
         console.warn("Storage upload failed, continuing without storage:", storageError);
@@ -203,6 +277,32 @@ export async function POST(request: NextRequest) {
           fileType: file.type,
           bufferLength: buffer.length,
         });
+        
+        // Update document status to error
+        if (!useRestApi) {
+          try {
+            await db.$executeRaw`
+              UPDATE documents 
+              SET status = 'failed', "errorMessage" = ${errorMessage}, "updatedAt" = NOW()
+              WHERE id = ${document.id}
+            `;
+          } catch (updateError) {
+            console.error("Failed to update document status:", updateError);
+          }
+        } else {
+          try {
+            await supabaseRestClient
+              .from('documents')
+              .update({ 
+                status: 'failed', 
+                errorMessage: errorMessage 
+              })
+              .eq('id', document.id);
+          } catch (restUpdateError) {
+            console.error("Failed to update document status via REST API:", restUpdateError);
+          }
+        }
+        
         throw new Error(`PDF processing failed: ${errorMessage}`);
       }
 
@@ -258,6 +358,33 @@ export async function POST(request: NextRequest) {
         } else if (embedError instanceof Error && embedError.message.includes("500")) {
           throw new Error("OpenAI API server error. Please try again later.");
         }
+        
+        // Update document status to error
+        const errorMessage = embedError instanceof Error ? embedError.message : "Embedding generation failed";
+        if (!useRestApi) {
+          try {
+            await db.$executeRaw`
+              UPDATE documents 
+              SET status = 'failed', "errorMessage" = ${errorMessage}, "updatedAt" = NOW()
+              WHERE id = ${document.id}
+            `;
+          } catch (updateError) {
+            console.error("Failed to update document status:", updateError);
+          }
+        } else {
+          try {
+            await supabaseRestClient
+              .from('documents')
+              .update({ 
+                status: 'failed', 
+                errorMessage: errorMessage 
+              })
+              .eq('id', document.id);
+          } catch (restUpdateError) {
+            console.error("Failed to update document status via REST API:", restUpdateError);
+          }
+        }
+        
         throw new Error(`Embedding generation failed: ${embedError instanceof Error ? embedError.message : "Unknown embedding error"}`);
       }
 
@@ -288,19 +415,34 @@ export async function POST(request: NextRequest) {
             throw new Error(`Invalid embedding dimensions: expected 1536, got ${embedding.length}`);
           }
           
-          await db.$executeRaw`
-            INSERT INTO vectors (id, "botId", "documentId", "chunkId", "chunkText", embedding, metadata, "createdAt")
-            VALUES (
-              ${chunkId},
-              ${bot.id},
-              ${document.id},
-              ${i},
-              ${chunkText},
-              ${embeddingVector}::vector,
-              ${metadataJson}::jsonb,
-              NOW()
-            )
-          `;
+          if (!useRestApi) {
+            await db.$executeRaw`
+              INSERT INTO vectors (id, "botId", "documentId", "chunkId", "chunkText", embedding, metadata, "createdAt")
+              VALUES (
+                ${chunkId},
+                ${bot.id},
+                ${document.id},
+                ${i},
+                ${chunkText},
+                ${embeddingVector}::vector,
+                ${metadataJson}::jsonb,
+                NOW()
+              )
+            `;
+          } else {
+            // Use REST API for vector insertion
+            await supabaseRestClient
+              .from('vectors')
+              .insert({
+                id: chunkId,
+                botId: bot.id,
+                documentId: document.id,
+                chunkId: i,
+                chunkText: chunkText,
+                embedding: embeddingVector,
+                metadata: metadata
+              });
+          }
           
           console.log(`[Vector ${i + 1}] Success`);
           vectorsInserted++;
@@ -347,14 +489,25 @@ export async function POST(request: NextRequest) {
       }
 
       // Update document status
-      try {
-        await db.$executeRaw`
-          UPDATE documents 
-          SET status = 'completed', "updatedAt" = NOW()
-          WHERE id = ${document.id}
-        `;
-      } catch (updateError) {
-        console.error("Failed to update document status:", updateError);
+      if (!useRestApi) {
+        try {
+          await db.$executeRaw`
+            UPDATE documents 
+            SET status = 'completed', "updatedAt" = NOW()
+            WHERE id = ${document.id}
+          `;
+        } catch (updateError) {
+          console.error("Failed to update document status:", updateError);
+        }
+      } else {
+        try {
+          await supabaseRestClient
+            .from('documents')
+            .update({ status: 'completed' })
+            .eq('id', document.id);
+        } catch (restUpdateError) {
+          console.error("Failed to update document status via REST API:", restUpdateError);
+        }
       }
 
       return NextResponse.json({
@@ -366,11 +519,22 @@ export async function POST(request: NextRequest) {
       console.error("Processing error:", error);
       // Update document status to error (if document exists)
       try {
-        await db.$executeRaw`
-          UPDATE documents 
-          SET status = 'failed', "errorMessage" = ${error instanceof Error ? error.message : "Unknown error"}, "updatedAt" = NOW()
-          WHERE id = ${document.id}
-        `;
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        if (!useRestApi) {
+          await db.$executeRaw`
+            UPDATE documents 
+            SET status = 'failed', "errorMessage" = ${errorMessage}, "updatedAt" = NOW()
+            WHERE id = ${document.id}
+          `;
+        } else {
+          await supabaseRestClient
+            .from('documents')
+            .update({ 
+              status: 'failed', 
+              errorMessage: errorMessage 
+            })
+            .eq('id', document.id);
+        }
       } catch (updateError) {
         console.error("Failed to update document status:", updateError);
       }
@@ -401,4 +565,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
