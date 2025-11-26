@@ -19,20 +19,34 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get user's site with bot
-    const site = await db.site.findFirst({
-      where: { userId: session.user.id },
-      include: { bot: true },
-    });
+    // Get user's bot (using raw query to avoid Prisma schema issues)
+    let bot: any = null;
+    try {
+      const bots: any[] = await db.$queryRaw`
+        SELECT b.id, b."siteId", b.name, b."openaiApiKeyEncrypted", s."userId"
+        FROM bots b
+        JOIN sites s ON b."siteId" = s.id
+        WHERE s."userId" = ${session.user.id}
+        LIMIT 1
+      `;
+      
+      if (bots.length > 0) {
+        bot = bots[0];
+      }
+    } catch (dbError) {
+      console.error("Database query failed:", dbError);
+      return NextResponse.json(
+        { error: "Database connection failed" },
+        { status: 500 },
+      );
+    }
 
-    if (!site || !site.bot) {
+    if (!bot) {
       return NextResponse.json(
         { error: "Bot not found. Please create a bot first." },
         { status: 404 },
       );
     }
-
-    const bot = site.bot;
 
     // Get API key
     if (!bot.openaiApiKeyEncrypted) {
@@ -80,19 +94,25 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Create document record
-    const document = await db.document.create({
-      data: {
-        botId: bot.id,
-        sourceType: "pdf",
-        fileName: file.name,
-        fileType: file.type,
-        fileSize: file.size,
-        storagePath: "", // Will be set after upload
-        ingestionStatus: "processing",
-        metadata: {},
-      },
-    });
+    // Create document record (using raw query to match actual schema)
+    let document: any = null;
+    try {
+      const documents: any[] = await db.$queryRaw`
+        INSERT INTO documents ("botId", "sourceType", "fileName", "fileType", "fileSize", "storagePath", "status", "metadata", "createdAt", "updatedAt")
+        VALUES (${bot.id}, 'pdf', ${file.name}, ${file.type}, ${file.size}, '', 'processing', '{}', NOW(), NOW())
+        RETURNING id, "botId", "sourceType", "fileName", "fileType", "fileSize", "storagePath", "status", "metadata", "createdAt", "updatedAt"
+      `;
+      
+      if (documents.length > 0) {
+        document = documents[0];
+      }
+    } catch (insertError) {
+      console.error("Failed to create document record:", insertError);
+      return NextResponse.json(
+        { error: "Failed to create document record" },
+        { status: 500 },
+      );
+    }
 
     try {
       // Upload to Supabase Storage (optional - document processing will continue if this fails)
@@ -306,7 +326,7 @@ export async function POST(request: NextRequest) {
           console.error("Chunk processing context:", {
             chunkIndex: i,
             chunkId,
-            siteId: site.id,
+            siteId: bot.id,
             docId: document.id,
             chunkTextLength: chunkText.length,
             embeddingDimensions: embedding.length,
@@ -327,10 +347,15 @@ export async function POST(request: NextRequest) {
       }
 
       // Update document status
-      await db.document.update({
-        where: { id: document.id },
-        data: { ingestionStatus: "completed" },
-      });
+      try {
+        await db.$executeRaw`
+          UPDATE documents 
+          SET status = 'completed', "updatedAt" = NOW()
+          WHERE id = ${document.id}
+        `;
+      } catch (updateError) {
+        console.error("Failed to update document status:", updateError);
+      }
 
       return NextResponse.json({
         success: true,
@@ -341,14 +366,11 @@ export async function POST(request: NextRequest) {
       console.error("Processing error:", error);
       // Update document status to error (if document exists)
       try {
-        await db.document.update({
-          where: { id: document.id },
-          data: {
-            ingestionStatus: "failed",
-            errorMessage:
-              error instanceof Error ? error.message : "Unknown error",
-          },
-        });
+        await db.$executeRaw`
+          UPDATE documents 
+          SET status = 'failed', "errorMessage" = ${error instanceof Error ? error.message : "Unknown error"}, "updatedAt" = NOW()
+          WHERE id = ${document.id}
+        `;
       } catch (updateError) {
         console.error("Failed to update document status:", updateError);
       }
