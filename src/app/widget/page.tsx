@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getServerAuthSession } from "~/server/auth";
 import { db } from "~/lib/db";
+import { getSiteByUserId } from "~/lib/supabaseRestClient";
 import WidgetSetup from "~/components/widget/WidgetSetup";
 
 export default async function WidgetPage() {
@@ -10,10 +11,24 @@ export default async function WidgetPage() {
     redirect("/login");
   }
 
-  const site = await db.site.findFirst({
-    where: { userId: session.user.id },
-    include: { bot: true },
-  });
+  // Try to get site from database first, fallback to REST API
+  let site;
+  try {
+    site = await db.site.findFirst({
+      where: { userId: session.user.id },
+      include: { bot: true },
+    });
+  } catch (dbError: any) {
+    // If database connection fails, fallback to REST API
+    console.warn("Database connection failed, falling back to REST API:", dbError.message);
+    
+    try {
+      site = await getSiteByUserId(session.user.id);
+    } catch (restError: any) {
+      console.error("REST API fallback also failed:", restError.message);
+      throw restError;
+    }
+  }
 
   if (!site || !site.bot) {
     redirect("/dashboard");
@@ -21,4 +36,3 @@ export default async function WidgetPage() {
 
   return <WidgetSetup botId={site.bot.id} />;
 }
-

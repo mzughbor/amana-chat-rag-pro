@@ -38,6 +38,24 @@ export async function getSitesByUserEmail(email: string) {
   }
 }
 
+export async function getSiteByUserId(userId: string) {
+  try {
+    const { data: sites, error: siteError } = await supabaseRestClient
+      .from('sites')
+      .select('id, name, userId, bot(id, name, welcomeMessage, widgetSettings, scriptEmbedId)')
+      .eq('userId', userId)
+      .limit(1)
+      .single();
+
+    if (siteError) throw siteError;
+    
+    return sites || null;
+  } catch (error) {
+    console.error('Error fetching site by user ID via REST API:', error);
+    throw error;
+  }
+}
+
 export async function createSite(userId: string, name: string, widgetSettings: any = {}) {
   try {
     const { data, error } = await supabaseRestClient
