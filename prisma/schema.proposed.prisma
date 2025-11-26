@@ -1,0 +1,267 @@
+// ============================================
+// PROPOSED SCHEMA - Production Ready
+// PostgreSQL + pgvector
+// ============================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// NextAuth Core Models
+// ============================================
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  accounts      Account[]
+  sessions      Session[]
+  sites         Site[]
+  conversations Conversation[] // Direct user conversations (optional)
+
+  @@map("users")
+  @@index([email])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+  @@index([userId])
+  @@index([sessionToken])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ============================================
+// Multi-Tenant Sites (Workspaces)
+// ============================================
+model Site {
+  id          String   @id @default(cuid())
+  userId      String   // Owner
+  name        String
+  domain      String?  @unique // Optional domain for multi-tenant
+  settings    Json?    @default("{}") // Site-level settings
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bots        Bot[]
+
+  @@map("sites")
+  @@index([userId])
+  @@index([domain])
+}
+
+// ============================================
+// Chatbots (Bot Instances)
+// ============================================
+model Bot {
+  id                   String   @id @default(cuid())
+  siteId               String
+  name                 String
+  welcomeMessage       String?  @db.Text
+  provider             String   @default("openai") // openai, anthropic, etc.
+  openaiApiKeyEncrypted String? @db.Text // BYOK encrypted at rest
+  status               String   @default("active") // draft, active, disabled
+  widgetSettings       Json?    @default("{}") // { primaryColor, radius, etc. }
+  scriptEmbedId        String?  @unique // Unique widget script ID
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  // Relations
+  site                 Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  documents            Document[]
+  qaPairs              QAPair[]
+  conversations        Conversation[]
+
+  @@map("bots")
+  @@index([siteId])
+  @@index([status])
+  @@index([scriptEmbedId])
+}
+
+// ============================================
+// Uploaded Documents
+// ============================================
+model Document {
+  id              String   @id @default(cuid())
+  botId           String
+  sourceType      String   @default("pdf") // pdf, docx, csv, md, qa, manual
+  fileName        String
+  fileType        String?  // MIME type
+  fileSize        Int?     // Bytes
+  storagePath     String?  // Supabase storage path
+  ingestionStatus String   @default("queued") // queued, processing, completed, failed
+  errorMessage    String?  @db.Text
+  metadata        Json?    @default("{}") // { pageCount, chunkCount, etc. }
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  bot             Bot      @relation(fields: [botId], references: [id], onDelete: Cascade)
+  vectors         Vector[]
+
+  @@map("documents")
+  @@index([botId])
+  @@index([ingestionStatus])
+  @@index([sourceType])
+}
+
+// ============================================
+// Structured Q&A Pairs
+// ============================================
+model QAPair {
+  id        String   @id @default(cuid())
+  botId     String
+  question  String   @db.Text
+  answer    String   @db.Text
+  status    String   @default("active") // active, archived, deleted
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  bot       Bot      @relation(fields: [botId], references: [id], onDelete: Cascade)
+
+  @@map("qa_pairs")
+  @@index([botId])
+  @@index([status])
+}
+
+// ============================================
+// Embeddings (pgvector)
+// ============================================
+model Vector {
+  id        String    @id @default(cuid())
+  botId     String    // Scoped to bot for RLS
+  documentId String?
+  chunkId   Int       // Chunk index within document
+  chunkText String    @db.Text
+  embedding Unsupported("vector(1536)") // pgvector type - managed via raw SQL
+  metadata  Json?     @default("{}") // { pageNumber, chunkIndex, etc. }
+  createdAt DateTime  @default(now())
+
+  // Relations
+  bot       Bot       @relation(fields: [botId], references: [id], onDelete: Cascade)
+  document  Document? @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@map("vectors")
+  @@index([botId])
+  @@index([documentId])
+  // Note: Vector similarity index created via SQL migration (see DATABASE_SCHEMA_ANALYSIS.md)
+}
+
+// ============================================
+// Conversations
+// ============================================
+model Conversation {
+  id        String   @id @default(cuid())
+  botId     String
+  visitorId String   // Anonymous visitor ID or user ID
+  userId    String?  // Optional authenticated user
+  title     String?  // Optional conversation title
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  bot       Bot      @relation(fields: [botId], references: [id], onDelete: Cascade)
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  messages  Message[]
+
+  @@map("conversations")
+  @@index([botId])
+  @@index([visitorId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// ============================================
+// Individual Messages
+// ============================================
+model Message {
+  id             String   @id @default(cuid())
+  conversationId String
+  role           String   // user, assistant, system
+  content        String   @db.Text
+  tokens         Int?     // Token count for cost tracking
+  latencyMs      Int?     // Response latency
+  metadata       Json?    @default("{}") // Additional metadata
+  createdAt      DateTime @default(now())
+
+  // Relations
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+  @@index([conversationId])
+  @@index([createdAt])
+  @@index([role])
+}
+
+// ============================================
+// Optional: Separate API Key Management
+// ============================================
+model ApiKey {
+  id            String   @id @default(cuid())
+  botId         String?  // Bot-scoped key
+  userId        String?  // User-scoped key (for future multi-provider)
+  provider      String   @default("openai")
+  encryptedKey  String   @db.Text
+  valid         Boolean  @default(true)
+  lastTestedAt  DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  bot           Bot?     @relation(fields: [botId], references: [id], onDelete: Cascade)
+  user          User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("api_keys")
+  @@index([botId])
+  @@index([userId])
+  @@index([provider])
+}
+

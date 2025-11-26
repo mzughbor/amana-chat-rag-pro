@@ -35,9 +35,10 @@ async function testConnection() {
     console.error('1. Check if Supabase project is active');
     console.error('2. Verify password is correct');
     console.error('3. Try updating DATABASE_URL to use Direct Connection');
+    console.error('4. The application will automatically fallback to Supabase REST API when database connection fails');
+    console.error('   - Make sure NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, and SUPABASE_SERVICE_ROLE_KEY are set correctly in .env');
     process.exit(1);
   }
 }
 
 testConnection();
-

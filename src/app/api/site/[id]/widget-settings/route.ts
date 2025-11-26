@@ -3,6 +3,56 @@ import { getServerAuthSessionFromRequest } from "~/server/auth";
 import { db } from "~/lib/db";
 import { updateWidgetSettings } from "~/lib/supabaseRestClient";
 
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const session = await getServerAuthSessionFromRequest(request);
+    
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const siteId = params.id;
+
+    if (!siteId) {
+      return NextResponse.json({ error: "Site ID is required" }, { status: 400 });
+    }
+
+    // Try to get widget settings from database first
+    try {
+      // Check if site belongs to user
+      const site = await db.site.findFirst({
+        where: {
+          id: siteId,
+          userId: session.user.id,
+        },
+        select: {
+          widgetSettings: true,
+        },
+      });
+
+      if (!site) {
+        return NextResponse.json({ error: "Site not found or unauthorized" }, { status: 404 });
+      }
+
+      return NextResponse.json({
+        widgetSettings: site.widgetSettings || {},
+      });
+    } catch (dbError: any) {
+      console.error("Database error:", dbError);
+      return NextResponse.json(
+        { error: "Failed to fetch widget settings", message: dbError.message },
+        { status: 500 },
+      );
+    }
+  } catch (error: any) {
+    console.error("Error fetching widget settings:", error);
+    return NextResponse.json(
+      { error: "Internal server error", message: error.message },
+      { status: 500 },
+    );
+  }
+}
+
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const session = await getServerAuthSessionFromRequest(request);

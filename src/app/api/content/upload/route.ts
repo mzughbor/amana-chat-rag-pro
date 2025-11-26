@@ -19,20 +19,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get user's site
+    // Get user's site with bot
     const site = await db.site.findFirst({
       where: { userId: session.user.id },
+      include: { bot: true },
     });
 
-    if (!site) {
+    if (!site || !site.bot) {
       return NextResponse.json(
-        { error: "Site not found. Please set up your site first." },
+        { error: "Bot not found. Please create a bot first." },
         { status: 404 },
       );
     }
 
+    const bot = site.bot;
+
     // Get API key
-    if (!site.apiKeyEncrypted) {
+    if (!bot.openaiApiKeyEncrypted) {
       return NextResponse.json(
         { error: "OpenAI API key not configured" },
         { status: 400 },
@@ -47,7 +50,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const apiKey = decryptApiKey(site.apiKeyEncrypted, encryptionKey);
+    const apiKey = decryptApiKey(bot.openaiApiKeyEncrypted, encryptionKey);
 
     // Parse form data
     const formData = await request.formData();
@@ -80,16 +83,20 @@ export async function POST(request: NextRequest) {
     // Create document record
     const document = await db.document.create({
       data: {
-        siteId: site.id,
-        filename: file.name,
+        botId: bot.id,
+        sourceType: "pdf",
+        fileName: file.name,
+        fileType: file.type,
+        fileSize: file.size,
         storagePath: "", // Will be set after upload
-        status: "processing",
+        ingestionStatus: "processing",
+        metadata: {},
       },
     });
 
     try {
       // Upload to Supabase Storage (optional - document processing will continue if this fails)
-      const filePath = `${site.id}/${document.id}/${file.name}`;
+      const filePath = `${bot.id}/${document.id}/${file.name}`;
       let storageSuccess = false;
       
       try {
@@ -262,11 +269,12 @@ export async function POST(request: NextRequest) {
           }
           
           await db.$executeRaw`
-            INSERT INTO vectors (id, "siteId", "docId", "chunkText", embedding, metadata, "createdAt")
+            INSERT INTO vectors (id, "botId", "documentId", "chunkId", "chunkText", embedding, metadata, "createdAt")
             VALUES (
               ${chunkId},
-              ${site.id},
+              ${bot.id},
               ${document.id},
+              ${i},
               ${chunkText},
               ${embeddingVector}::vector,
               ${metadataJson}::jsonb,
@@ -321,7 +329,7 @@ export async function POST(request: NextRequest) {
       // Update document status
       await db.document.update({
         where: { id: document.id },
-        data: { status: "completed" },
+        data: { ingestionStatus: "completed" },
       });
 
       return NextResponse.json({
@@ -336,7 +344,7 @@ export async function POST(request: NextRequest) {
         await db.document.update({
           where: { id: document.id },
           data: {
-            status: "error",
+            ingestionStatus: "failed",
             errorMessage:
               error instanceof Error ? error.message : "Unknown error",
           },
