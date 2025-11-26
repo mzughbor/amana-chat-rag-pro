@@ -1,5 +1,5 @@
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
-import { type NextRequest, type NextResponse } from "next/server";
+import { type NextRequest } from "next/server";
 import {
   getServerSession,
   type NextAuthOptions,
@@ -10,7 +10,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { db } from "~/lib/db";
 import { supabaseAdmin } from "~/lib/supabase";
 import { getToken } from "next-auth/jwt";
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import { type Session } from "next-auth";
 import { supabaseRestClient } from "~/lib/supabaseRestClient";
 
@@ -25,43 +25,6 @@ declare module "next-auth" {
 declare module "next-auth/jwt" {
   interface JWT extends DefaultJWT {
     id: string;
-  }
-}
-
-// Helper function to get or create user via REST API as fallback
-async function getUserOrCreateViaRest(email: string, name?: string | null, image?: string | null) {
-  try {
-    // First try to get the user
-    const { data: userData, error: userError } = await supabaseRestClient
-      .from('users')
-      .select('*')
-      .eq('email', email)
-      .single();
-
-    if (userError && userError.code !== 'PGRST116') { // PGRST116 means no rows returned
-      throw userError;
-    }
-
-    if (userData) {
-      return userData;
-    }
-
-    // If user doesn't exist, create them
-    const { data: newUser, error: createError } = await supabaseRestClient
-      .from('users')
-      .insert({
-        email,
-        name: name || null,
-        image: image || null,
-      })
-      .select()
-      .single();
-
-    if (createError) throw createError;
-    return newUser;
-  } catch (error) {
-    console.error("Error getting or creating user via REST API:", error);
-    throw error;
   }
 }
 
@@ -90,86 +53,84 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          console.error("Missing credentials");
-          return null;
+          throw new Error("Email and password are required");
         }
 
-        // Use Supabase Auth to verify credentials
-        const { data, error } = await supabaseAdmin.auth.signInWithPassword({
-          email: credentials.email,
-          password: credentials.password,
-        });
-
-        if (error) {
-          console.error("Supabase auth error:", error.message);
-          // Check for specific error types
-          if (error.message.includes("Email not confirmed")) {
-            throw new Error("Please verify your email address before signing in. Check your inbox for the verification link.");
-          }
-          if (error.message.includes("Invalid login credentials")) {
-            throw new Error("Invalid email or password");
-          }
-          throw new Error(error.message || "Authentication failed");
-        }
-
-        if (!data.user) {
-          console.error("No user data returned from Supabase");
-          return null;
-        }
-
-        // Get or create user in our database
-        // Ensure database connection before querying
-        let user;
         try {
-          user = await db.user.findUnique({
-            where: { email: data.user.email ?? undefined },
+          // Use Supabase Auth to verify credentials
+          const { data, error } = await supabaseAdmin.auth.signInWithPassword({
+            email: credentials.email,
+            password: credentials.password,
           });
 
-          if (!user) {
-            user = await db.user.create({
-              data: {
-                email: data.user.email!,
-                name: data.user.user_metadata?.name ?? null,
-                image: data.user.user_metadata?.avatar_url ?? null,
-              },
-            });
+          if (error) {
+            console.error("Supabase auth error:", error.message);
+            // Check for specific error types
+            if (error.message.includes("Email not confirmed")) {
+              throw new Error("Please verify your email address before signing in. Check your inbox for the verification link.");
+            }
+            if (error.message.includes("Invalid login credentials")) {
+              throw new Error("Invalid email or password");
+            }
+            throw new Error(error.message || "Authentication failed");
           }
-        } catch (dbError: any) {
-          // Handle database connection errors with REST API fallback
-          if (dbError.code === "P1001" || dbError.code === "P1000") {
-            console.warn("Database connection failed, falling back to REST API:", dbError.message);
-            
-            try {
-              const restUser = await getUserOrCreateViaRest(
-                data.user.email!,
-                data.user.user_metadata?.name ?? null,
-                data.user.user_metadata?.avatar_url ?? null
-              );
+
+          if (!data.user) {
+            throw new Error("No user data returned from authentication");
+          }
+
+          // Get or create user in our database using REST API as primary method
+          // since we know the direct DB connection is unreliable
+          try {
+            const { data: userData, error: userError } = await supabaseRestClient
+              .from('users')
+              .select('*')
+              .eq('email', data.user.email)
+              .single();
+
+            if (userError && userError.code !== 'PGRST116') { // PGRST116 means no rows returned
+              throw userError;
+            }
+
+            let user;
+            if (userData) {
+              user = {
+                id: userData.id,
+                email: userData.email,
+                name: userData.name,
+                image: userData.image,
+              };
+            } else {
+              // Create user if not exists
+              const { data: newUser, error: createError } = await supabaseRestClient
+                .from('users')
+                .insert({
+                  email: data.user.email!,
+                  name: data.user.user_metadata?.name ?? null,
+                  image: data.user.user_metadata?.avatar_url ?? null,
+                })
+                .select()
+                .single();
+
+              if (createError) throw createError;
               
               user = {
-                id: restUser.id,
-                email: restUser.email,
-                name: restUser.name,
-                image: restUser.image,
+                id: newUser.id,
+                email: newUser.email,
+                name: newUser.name,
+                image: newUser.image,
               };
-            } catch (restError: any) {
-              console.error("REST API fallback also failed:", restError.message);
-              throw new Error(
-                "Database connection failed and REST API fallback failed. Please check your DATABASE_URL in .env file. " +
-                "See terminal for detailed error message."
-              );
             }
-          } else {
-            throw dbError;
-          }
-        }
 
-        return {
-          id: user.id,
-          email: user.email!,
-          name: user.name,
-          image: user.image,
-        };
+            return user;
+          } catch (restError: any) {
+            console.error("Error with REST API user management:", restError.message);
+            throw new Error("Failed to manage user account. Please try again later.");
+          }
+        } catch (error: any) {
+          console.error("Authentication error:", error.message);
+          throw error;
+        }
       },
     }),
   ],
@@ -184,10 +145,10 @@ export const authOptions: NextAuthOptions = {
 /**
  * Get server session in App Router (for server components)
  * Use this in server components and server actions
- * Workaround for next-auth v4 with App Router
  */
 export async function getServerAuthSession(): Promise<Session | null> {
   try {
+    // Use REST API approach since we know it works
     const cookieStore = await cookies();
     
     // Get session token from cookies
@@ -213,51 +174,23 @@ export async function getServerAuthSession(): Promise<Session | null> {
       return null;
     }
 
-    // Get user from database with fallback to REST API
-    let user;
-    try {
-      user = await db.user.findUnique({
-        where: { email: token.email as string },
-      });
-    } catch (dbError: any) {
-      // Handle database connection errors with REST API fallback
-      if (dbError.code === "P1001" || dbError.code === "P1000") {
-        console.warn("Database connection failed, falling back to REST API:", dbError.message);
-        
-        try {
-          const { data: restUser, error: restError } = await supabaseRestClient
-            .from('users')
-            .select('*')
-            .eq('email', token.email)
-            .single();
+    // Get user from database via REST API
+    const { data: userData, error: userError } = await supabaseRestClient
+      .from('users')
+      .select('*')
+      .eq('email', token.email)
+      .single();
 
-          if (restError) throw restError;
-          
-          user = {
-            id: restUser.id,
-            email: restUser.email,
-            name: restUser.name,
-            image: restUser.image,
-          };
-        } catch (restError: any) {
-          console.error("REST API fallback also failed:", restError.message);
-          throw new Error("Failed to fetch user data");
-        }
-      } else {
-        throw dbError;
-      }
-    }
-
-    if (!user) {
+    if (userError || !userData) {
       return null;
     }
 
     return {
       user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        image: user.image,
+        id: userData.id,
+        email: userData.email,
+        name: userData.name,
+        image: userData.image,
       },
       expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
     } as Session;
@@ -270,7 +203,6 @@ export async function getServerAuthSession(): Promise<Session | null> {
 /**
  * Get server session in API routes
  * Use this in API route handlers (route.ts files)
- * Uses getToken which works better with API routes
  */
 export async function getServerAuthSessionFromRequest(
   req: NextRequest,
@@ -306,51 +238,23 @@ export async function getServerAuthSessionFromRequest(
       return null;
     }
 
-    // Get user from database with fallback to REST API
-    let user;
-    try {
-      user = await db.user.findUnique({
-        where: { email: token.email as string },
-      });
-    } catch (dbError: any) {
-      // Handle database connection errors with REST API fallback
-      if (dbError.code === "P1001" || dbError.code === "P1000") {
-        console.warn("Database connection failed, falling back to REST API:", dbError.message);
-        
-        try {
-          const { data: restUser, error: restError } = await supabaseRestClient
-            .from('users')
-            .select('*')
-            .eq('email', token.email)
-            .single();
+    // Get user from database via REST API
+    const { data: userData, error: userError } = await supabaseRestClient
+      .from('users')
+      .select('*')
+      .eq('email', token.email)
+      .single();
 
-          if (restError) throw restError;
-          
-          user = {
-            id: restUser.id,
-            email: restUser.email,
-            name: restUser.name,
-            image: restUser.image,
-          };
-        } catch (restError: any) {
-          console.error("REST API fallback also failed:", restError.message);
-          throw new Error("Failed to fetch user data");
-        }
-      } else {
-        throw dbError;
-      }
-    }
-
-    if (!user) {
+    if (userError || !userData) {
       return null;
     }
 
     return {
       user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        image: user.image,
+        id: userData.id,
+        email: userData.email,
+        name: userData.name,
+        image: userData.image,
       },
       expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
     } as Session;

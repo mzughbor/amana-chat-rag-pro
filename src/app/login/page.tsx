@@ -37,7 +37,14 @@ export default function LoginPage() {
       });
 
       if (result?.error) {
-        setError(result.error);
+        // Handle specific error messages
+        if (result.error.includes("Email not confirmed")) {
+          setError("Please verify your email address before signing in. Check your inbox for the verification link.");
+        } else if (result.error.includes("Invalid email or password")) {
+          setError("Invalid email or password. Please try again.");
+        } else {
+          setError(result.error);
+        }
         setLoading(false);
       } else if (result?.ok) {
         // Wait a bit for session to update, then redirect
@@ -129,7 +136,7 @@ export default function LoginPage() {
               </Button>
             </form>
 
-            <div className="mt-6 text-center">
+            <div className="mt-6 text-center space-y-2">
               <p className="text-sm text-gray-600">
                 Don&apos;t have an account?{" "}
                 <Link
@@ -137,6 +144,14 @@ export default function LoginPage() {
                   className="font-medium text-purple-600 hover:text-purple-700 transition-colors"
                 >
                   Sign up
+                </Link>
+              </p>
+              <p className="text-sm text-gray-600">
+                <Link
+                  href="/resend-verification"
+                  className="font-medium text-purple-600 hover:text-purple-700 transition-colors"
+                >
+                  Resend verification email
                 </Link>
               </p>
             </div>
