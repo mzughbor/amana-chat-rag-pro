@@ -21,18 +21,31 @@ export async function POST(
       );
     }
 
-    // Get site
-    const site = await db.site.findUnique({
+    // Get bot (siteId is actually botId in the route, but keeping for backward compatibility)
+    // Try to find by botId first, then by siteId
+    let bot = await db.bot.findUnique({
       where: { id: siteId },
+      include: { site: true },
     });
 
-    if (!site) {
-      return NextResponse.json({ error: "Site not found" }, { status: 404 });
+    // If not found as botId, try finding by siteId
+    if (!bot) {
+      const site = await db.site.findUnique({
+        where: { id: siteId },
+        include: { bot: true },
+      });
+      if (site?.bot) {
+        bot = site.bot;
+      }
     }
 
-    if (!site.apiKeyEncrypted) {
+    if (!bot) {
+      return NextResponse.json({ error: "Bot not found" }, { status: 404 });
+    }
+
+    if (!bot.openaiApiKeyEncrypted) {
       return NextResponse.json(
-        { error: "API key not configured for this site" },
+        { error: "API key not configured for this bot" },
         { status: 400 },
       );
     }
@@ -46,10 +59,10 @@ export async function POST(
       );
     }
 
-    const apiKey = decryptApiKey(site.apiKeyEncrypted, encryptionKey);
+    const apiKey = decryptApiKey(bot.openaiApiKeyEncrypted, encryptionKey);
 
     // Retrieve relevant context using RAG
-    const relevantChunks = await retrieveContext(message, siteId, apiKey, 5);
+    const relevantChunks = await retrieveContext(message, bot.id, apiKey, 5);
     const context = buildContext(relevantChunks);
 
     // Build prompt with context
@@ -74,41 +87,47 @@ Answer the user's question based on the context above. Be concise and helpful.`;
 
     const response = completion.choices[0]?.message?.content ?? "I'm sorry, I couldn't generate a response.";
 
-    // Log conversation
+    // Log conversation and messages
     const visitorIdFinal = visitorId ?? crypto.randomUUID();
-    const conversation = await db.conversation.findFirst({
+    let conversation = await db.conversation.findFirst({
       where: {
-        siteId,
+        botId: bot.id,
         visitorId: visitorIdFinal,
       },
       orderBy: { updatedAt: "desc" },
     });
 
-    const messages = conversation
-      ? [
-          ...((conversation.messages as any[]) ?? []),
-          { role: "user", content: message, timestamp: new Date() },
-          { role: "assistant", content: response, timestamp: new Date() },
-        ]
-      : [
-          { role: "user", content: message, timestamp: new Date() },
-          { role: "assistant", content: response, timestamp: new Date() },
-        ];
-
     if (conversation) {
+      // Update existing conversation
       await db.conversation.update({
         where: { id: conversation.id },
-        data: { messages, updatedAt: new Date() },
+        data: { updatedAt: new Date() },
       });
     } else {
-      await db.conversation.create({
+      // Create new conversation
+      conversation = await db.conversation.create({
         data: {
-          siteId,
+          botId: bot.id,
           visitorId: visitorIdFinal,
-          messages,
         },
       });
     }
+
+    // Create message records
+    await db.message.createMany({
+      data: [
+        {
+          conversationId: conversation.id,
+          role: "user",
+          content: message,
+        },
+        {
+          conversationId: conversation.id,
+          role: "assistant",
+          content: response,
+        },
+      ],
+    });
 
     return NextResponse.json({
       response,

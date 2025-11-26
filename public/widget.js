@@ -1,14 +1,23 @@
 (function () {
   'use strict';
 
-  // Get siteId from query parameter
-  const urlParams = new URLSearchParams(window.location.search);
-  const siteId = urlParams.get('siteId') || new URLSearchParams(document.currentScript?.src.split('?')[1] || '').get('siteId');
+  // Get parameters from query string
+  const scriptSrc = document.currentScript?.src || '';
+  const scriptParams = new URLSearchParams(scriptSrc.split('?')[1] || '');
+  const siteId = scriptParams.get('siteId');
+  const colorParam = scriptParams.get('color') || '6B46C1'; // Default purple
+  const radiusParam = scriptParams.get('radius') || '50%'; // Default rounded
 
   if (!siteId) {
     console.error('AmanaRAG: siteId is required');
     return;
   }
+
+  // Parse color (add # if not present)
+  const primaryColor = colorParam.startsWith('#') ? colorParam : `#${colorParam}`;
+  
+  // Parse border radius
+  const borderRadius = radiusParam;
 
   // Create widget button
   const widgetButton = document.createElement('div');
@@ -24,9 +33,9 @@
     right: 20px;
     width: 60px;
     height: 60px;
-    background-color: #6B46C1;
+    background-color: ${primaryColor};
     color: white;
-    border-radius: 50%;
+    border-radius: ${borderRadius};
     display: flex;
     align-items: center;
     justify-content: center;

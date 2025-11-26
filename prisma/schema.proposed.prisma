@@ -1,5 +1,5 @@
 // ============================================
-// AmanaRAG - BYOK RAG Chatbot Platform
+// PROPOSED SCHEMA - Production Ready
 // PostgreSQL + pgvector
 // ============================================
 
@@ -28,7 +28,7 @@ model User {
   accounts      Account[]
   sessions      Session[]
   sites         Site[]
-  conversations Conversation[] // Optional authenticated user conversations
+  conversations Conversation[] // Direct user conversations (optional)
 
   @@map("users")
   @@index([email])
@@ -77,8 +77,7 @@ model VerificationToken {
 }
 
 // ============================================
-// Sites (Workspaces/Websites)
-// Each Site has exactly one Bot
+// Multi-Tenant Sites (Workspaces)
 // ============================================
 model Site {
   id          String   @id @default(cuid())
@@ -91,7 +90,7 @@ model Site {
 
   // Relations
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  bot         Bot?     // One bot per site (1:1 relationship)
+  bots        Bot[]
 
   @@map("sites")
   @@index([userId])
@@ -99,12 +98,11 @@ model Site {
 }
 
 // ============================================
-// Bots (Chatbot Instances)
-// Each Bot belongs to one Site
+// Chatbots (Bot Instances)
 // ============================================
 model Bot {
   id                   String   @id @default(cuid())
-  siteId               String   @unique // One bot per site
+  siteId               String
   name                 String
   welcomeMessage       String?  @db.Text
   provider             String   @default("openai") // openai, anthropic, etc.
@@ -120,7 +118,6 @@ model Bot {
   documents            Document[]
   qaPairs              QAPair[]
   conversations        Conversation[]
-  vectors              Vector[]
 
   @@map("bots")
   @@index([siteId])
@@ -129,8 +126,7 @@ model Bot {
 }
 
 // ============================================
-// Documents (Uploaded Files)
-// Each Document belongs to one Bot
+// Uploaded Documents
 // ============================================
 model Document {
   id              String   @id @default(cuid())
@@ -157,8 +153,7 @@ model Document {
 }
 
 // ============================================
-// QAPairs (Manual Q&A)
-// Each QAPair belongs to one Bot
+// Structured Q&A Pairs
 // ============================================
 model QAPair {
   id        String   @id @default(cuid())
@@ -178,8 +173,7 @@ model QAPair {
 }
 
 // ============================================
-// Vectors (Embeddings)
-// Each Vector belongs to one Document
+// Embeddings (pgvector)
 // ============================================
 model Vector {
   id        String    @id @default(cuid())
@@ -198,12 +192,11 @@ model Vector {
   @@map("vectors")
   @@index([botId])
   @@index([documentId])
-  // Note: Vector similarity index created via SQL migration
+  // Note: Vector similarity index created via SQL migration (see DATABASE_SCHEMA_ANALYSIS.md)
 }
 
 // ============================================
-// Conversations (Chat Sessions)
-// Each Conversation belongs to one Bot
+// Conversations
 // ============================================
 model Conversation {
   id        String   @id @default(cuid())
@@ -227,8 +220,7 @@ model Conversation {
 }
 
 // ============================================
-// Messages (Individual Chat Messages)
-// Each Message belongs to one Conversation
+// Individual Messages
 // ============================================
 model Message {
   id             String   @id @default(cuid())
@@ -248,3 +240,28 @@ model Message {
   @@index([createdAt])
   @@index([role])
 }
+
+// ============================================
+// Optional: Separate API Key Management
+// ============================================
+model ApiKey {
+  id            String   @id @default(cuid())
+  botId         String?  // Bot-scoped key
+  userId        String?  // User-scoped key (for future multi-provider)
+  provider      String   @default("openai")
+  encryptedKey  String   @db.Text
+  valid         Boolean  @default(true)
+  lastTestedAt  DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  bot           Bot?     @relation(fields: [botId], references: [id], onDelete: Cascade)
+  user          User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("api_keys")
+  @@index([botId])
+  @@index([userId])
+  @@index([provider])
+}
+

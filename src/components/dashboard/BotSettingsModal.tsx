@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Modal from "~/components/ui/Modal";
 import Button from "~/components/ui/Button";
 
@@ -27,8 +27,30 @@ export default function BotSettingsModal({
   const [cornerRadius, setCornerRadius] = useState("rounded-full");
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const widgetUrl = `${window.location.origin}/widget.js`;
-  const snippet = `<script src="${widgetUrl}?siteId=${bot.id}"></script>`;
+  
+  // Generate widget URL with current settings
+  const widgetUrl = typeof window !== "undefined" ? window.location.origin : "";
+  
+  // Convert cornerRadius Tailwind class to CSS border-radius value for widget
+  const getCornerRadiusValue = (radius: string): string => {
+    const radiusMap: Record<string, string> = {
+      "rounded-none": "0px",
+      "rounded-lg": "8px",
+      "rounded-2xl": "16px",
+      "rounded-full": "50%",
+    };
+    return radiusMap[radius] || "50%";
+  };
+  
+  // Generate snippet with current settings - updates automatically when settings change
+  const snippet = useMemo(() => {
+    const params = new URLSearchParams({
+      siteId: bot.id,
+      color: primaryColor.replace("#", ""), // Remove # for URL
+      radius: getCornerRadiusValue(cornerRadius),
+    });
+    return `<script src="${widgetUrl}/widget.js?${params.toString()}"></script>`;
+  }, [bot.id, primaryColor, cornerRadius, widgetUrl]);
 
   // Load existing widget settings when modal opens
   useEffect(() => {
@@ -39,12 +61,33 @@ export default function BotSettingsModal({
 
   const loadWidgetSettings = async () => {
     try {
-      // In a real implementation, we would fetch the current settings from the API
-      // For now, we'll use default values
-      setPrimaryColor("#6B46C1");
-      setCornerRadius("rounded-full");
+      const response = await fetch(`/api/bots/${bot.id}/widget-settings`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const settings = data.widgetSettings || {};
+        
+        if (settings.primaryColor) {
+          setPrimaryColor(settings.primaryColor);
+        }
+        if (settings.cornerRadius) {
+          setCornerRadius(settings.cornerRadius);
+        }
+      } else {
+        // If no settings found, use defaults
+        setPrimaryColor("#6B46C1");
+        setCornerRadius("rounded-full");
+      }
     } catch (error) {
       console.error("Error loading widget settings:", error);
+      // Use defaults on error
+      setPrimaryColor("#6B46C1");
+      setCornerRadius("rounded-full");
     }
   };
 
@@ -58,7 +101,7 @@ export default function BotSettingsModal({
         cornerRadius,
       };
 
-      const response = await fetch(`/api/site/${bot.id}/widget-settings`, {
+      const response = await fetch(`/api/bots/${bot.id}/widget-settings`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -215,7 +258,7 @@ export default function BotSettingsModal({
             </p>
             <div className="relative">
               <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm font-mono">
-                <code>{snippet}</code>
+                <code className="break-all">{snippet}</code>
               </pre>
               <Button
                 variant="primary"

@@ -20,23 +20,24 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       );
     }
 
-    // Get user's site
+    // Get user's site with bot
     const site = await db.site.findFirst({
       where: { userId: session.user.id },
+      include: { bot: true },
     });
 
-    if (!site) {
+    if (!site || !site.bot) {
       return NextResponse.json(
-        { error: "Site not found. Please set up your site first." },
+        { error: "Bot not found. Please create a bot first." },
         { status: 404 },
       );
     }
 
-    // Check if document belongs to user's site
+    // Check if document belongs to user's bot
     const document = await db.document.findFirst({
       where: {
         id: documentId,
-        siteId: site.id,
+        botId: site.bot.id,
       },
     });
 
@@ -50,8 +51,8 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     // Delete associated vectors/embeddings
     await db.$executeRaw`
       DELETE FROM vectors 
-      WHERE "siteId" = ${site.id} 
-      AND "docId" = ${documentId}
+      WHERE "botId" = ${site.bot.id} 
+      AND "documentId" = ${documentId}
     `;
 
     // Delete document from storage if it exists

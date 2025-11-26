@@ -8,18 +8,34 @@ export async function GET(
   try {
     const { siteId } = params;
 
-    const site = await db.site.findUnique({
+    // Try to find bot by ID first (for backward compatibility, siteId might be botId)
+    let bot = await db.bot.findUnique({
       where: { id: siteId },
-      select: { widgetSettings: true },
+      select: { widgetSettings: true, scriptEmbedId: true },
     });
 
-    if (!site) {
-      return NextResponse.json({ error: "Site not found" }, { status: 404 });
+    // If not found, try finding by siteId
+    if (!bot) {
+      const site = await db.site.findUnique({
+        where: { id: siteId },
+        include: { bot: true },
+      });
+      if (site?.bot) {
+        bot = {
+          widgetSettings: site.bot.widgetSettings,
+          scriptEmbedId: site.bot.scriptEmbedId,
+        };
+      }
+    }
+
+    if (!bot) {
+      return NextResponse.json({ error: "Bot not found" }, { status: 404 });
     }
 
     return NextResponse.json({
-      siteId,
-      widgetSettings: site.widgetSettings ?? {},
+      botId: siteId, // Return botId for consistency
+      widgetSettings: bot.widgetSettings ?? {},
+      scriptEmbedId: bot.scriptEmbedId,
     });
   } catch (error) {
     console.error("Widget config error:", error);

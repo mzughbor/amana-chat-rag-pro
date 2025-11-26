@@ -19,11 +19,11 @@ interface QAPair {
 }
 
 export default function UploadContent({
-  siteId,
+  botId,
   documents,
   qaPairs,
 }: {
-  siteId: string;
+  botId: string;
   documents: Document[];
   qaPairs: QAPair[];
 }) {

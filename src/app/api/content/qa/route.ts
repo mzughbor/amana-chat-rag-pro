@@ -13,20 +13,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get user's site
+    // Get user's site with bot
     const site = await db.site.findFirst({
       where: { userId: session.user.id },
+      include: { bot: true },
     });
 
-    if (!site) {
+    if (!site || !site.bot) {
       return NextResponse.json(
-        { error: "Site not found. Please set up your site first." },
+        { error: "Bot not found. Please create a bot first." },
         { status: 404 },
       );
     }
 
+    const bot = site.bot;
+
     // Get API key
-    if (!site.apiKeyEncrypted) {
+    if (!bot.openaiApiKeyEncrypted) {
       return NextResponse.json(
         { error: "OpenAI API key not configured" },
         { status: 400 },
@@ -41,7 +44,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const apiKey = decryptApiKey(site.apiKeyEncrypted, encryptionKey);
+    const apiKey = decryptApiKey(bot.openaiApiKeyEncrypted, encryptionKey);
 
     const body = await request.json();
     const { question, answer } = body;
@@ -56,9 +59,10 @@ export async function POST(request: NextRequest) {
     // Create Q&A pair
     const qaPair = await db.qAPair.create({
       data: {
-        siteId: site.id,
+        botId: bot.id,
         question,
         answer,
+        status: "active",
       },
     });
 
@@ -68,11 +72,12 @@ export async function POST(request: NextRequest) {
 
     // Store as vector for retrieval using parameterized query
     await db.$executeRaw`
-      INSERT INTO vectors (id, "siteId", "docId", "chunkText", embedding, metadata, "createdAt")
+      INSERT INTO vectors (id, "botId", "documentId", "chunkId", "chunkText", embedding, metadata, "createdAt")
       VALUES (
         ${crypto.randomUUID()},
-        ${site.id},
+        ${bot.id},
         NULL,
+        0,
         ${`Q: ${question}\nA: ${answer}`},
         ${embeddingString}::vector,
         ${JSON.stringify({ type: "qa", qaId: qaPair.id })}::jsonb,
@@ -104,20 +109,23 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get user's site
+    // Get user's site with bot
     const site = await db.site.findFirst({
       where: { userId: session.user.id },
+      include: { bot: true },
     });
 
-    if (!site) {
+    if (!site || !site.bot) {
       return NextResponse.json(
-        { error: "Site not found. Please set up your site first." },
+        { error: "Bot not found. Please create a bot first." },
         { status: 404 },
       );
     }
 
+    const bot = site.bot;
+
     // Get API key
-    if (!site.apiKeyEncrypted) {
+    if (!bot.openaiApiKeyEncrypted) {
       return NextResponse.json(
         { error: "OpenAI API key not configured" },
         { status: 400 },
@@ -132,7 +140,7 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    const apiKey = decryptApiKey(site.apiKeyEncrypted, encryptionKey);
+    const apiKey = decryptApiKey(bot.openaiApiKeyEncrypted, encryptionKey);
 
     const body = await request.json();
     const { id, question, answer } = body;
@@ -144,11 +152,11 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    // Check if Q&A pair belongs to user's site
+    // Check if Q&A pair belongs to user's bot
     const existingQaPair = await db.qAPair.findFirst({
       where: {
         id,
-        siteId: site.id,
+        botId: bot.id,
       },
     });
 
@@ -172,7 +180,7 @@ export async function PUT(request: NextRequest) {
     // Delete old vector embeddings for this Q&A pair
     await db.$executeRaw`
       DELETE FROM vectors 
-      WHERE "siteId" = ${site.id} 
+      WHERE "botId" = ${bot.id} 
       AND metadata->>'type' = 'qa' 
       AND metadata->>'qaId' = ${id}
     `;
@@ -183,11 +191,12 @@ export async function PUT(request: NextRequest) {
 
     // Store updated vector for retrieval
     await db.$executeRaw`
-      INSERT INTO vectors (id, "siteId", "docId", "chunkText", embedding, metadata, "createdAt")
+      INSERT INTO vectors (id, "botId", "documentId", "chunkId", "chunkText", embedding, metadata, "createdAt")
       VALUES (
         ${crypto.randomUUID()},
-        ${site.id},
+        ${bot.id},
         NULL,
+        0,
         ${`Q: ${question}\nA: ${answer}`},
         ${embeddingString}::vector,
         ${JSON.stringify({ type: "qa", qaId: id })}::jsonb,
@@ -241,11 +250,11 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Check if Q&A pair belongs to user's site
+    // Check if Q&A pair belongs to user's bot
     const existingQaPair = await db.qAPair.findFirst({
       where: {
         id,
-        siteId: site.id,
+        botId: bot.id,
       },
     });
 
@@ -264,7 +273,7 @@ export async function DELETE(request: NextRequest) {
     // Delete associated vector embeddings
     await db.$executeRaw`
       DELETE FROM vectors 
-      WHERE "siteId" = ${site.id} 
+      WHERE "botId" = ${bot.id} 
       AND metadata->>'type' = 'qa' 
       AND metadata->>'qaId' = ${id}
     `;

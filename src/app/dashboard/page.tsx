@@ -39,8 +39,8 @@ export default function DashboardPage() {
   const fetchUserSites = async () => {
     try {
       setLoading(true);
-      // Fetch actual sites from the API
-      const response = await fetch("/api/sites", {
+      // Fetch bots from the API
+      const response = await fetch("/api/bots", {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -48,22 +48,22 @@ export default function DashboardPage() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to fetch sites");
+        throw new Error("Failed to fetch bots");
       }
 
-      const userSites = await response.json();
+      const botsData = await response.json();
 
-      // Transform sites to bots format
-      const transformedBots = userSites.map((site: any) => ({
-        id: site.id,
-        name: site.name,
-        welcomeMessage: "Hello! How can I help you today?",
-        createdAt: site.createdAt,
+      // Transform to bot format
+      const transformedBots = botsData.map((bot: any) => ({
+        id: bot.id,
+        name: bot.name,
+        welcomeMessage: bot.welcomeMessage || "Hello! How can I help you today?",
+        createdAt: bot.createdAt,
       }));
 
       setBots(transformedBots);
     } catch (error) {
-      console.error("Error fetching user sites:", error);
+      console.error("Error fetching bots:", error);
       // Fallback to empty array if there's an error
       setBots([]);
     } finally {

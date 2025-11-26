@@ -5,14 +5,14 @@ import Link from "next/link";
 import Card from "~/components/ui/Card";
 import Button from "~/components/ui/Button";
 
-export default function WidgetSetup({ siteId }: { siteId: string }) {
+export default function WidgetSetup({ botId }: { botId: string }) {
   const [copied, setCopied] = useState(false);
 
-  // Use a consistent approach for the widget script URL
+  // Use botId in widget script URL (widget.js will handle it)
   const widgetScript = `<script>
   (function() {
     var script = document.createElement('script');
-    script.src = '/widget.js?siteId=${siteId}';
+    script.src = '/widget.js?siteId=${botId}';
     script.async = true;
     document.head.appendChild(script);
   })();

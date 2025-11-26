@@ -12,12 +12,13 @@ export default async function WidgetPage() {
 
   const site = await db.site.findFirst({
     where: { userId: session.user.id },
+    include: { bot: true },
   });
 
-  if (!site) {
-    redirect("/api-key");
+  if (!site || !site.bot) {
+    redirect("/dashboard");
   }
 
-  return <WidgetSetup siteId={site.id} />;
+  return <WidgetSetup botId={site.bot.id} />;
 }
 

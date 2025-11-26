@@ -8,7 +8,7 @@ const DEFAULT_TOP_K = 5;
  */
 export async function retrieveContext(
   query: string,
-  siteId: string,
+  botId: string,
   apiKey: string,
   k: number = DEFAULT_TOP_K,
 ): Promise<Array<{ text: string; metadata: any; similarity: number }>> {
@@ -35,7 +35,7 @@ export async function retrieveContext(
       metadata,
       1 - (embedding <=> ${embeddingString}::vector) as similarity
     FROM vectors
-    WHERE "siteId" = ${siteId}
+    WHERE "botId" = ${botId}
     ORDER BY embedding <=> ${embeddingString}::vector
     LIMIT ${k}
   `;
