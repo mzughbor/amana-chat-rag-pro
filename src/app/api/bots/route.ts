@@ -186,28 +186,40 @@ export async function POST(request: Request) {
       console.warn("Database connection failed when creating bot, falling back to REST API:", dbError.message);
       
       try {
+        // Check if Supabase client is properly initialized
+        if (!supabaseRestClient) {
+          throw new Error("Supabase REST client not initialized");
+        }
+        
         // Create site via REST API
         const { data: siteData, error: siteError } = await supabaseRestClient
           .from('sites')
-          .insert({
+          .insert([{
+            id: crypto.randomUUID(),
             userId: session.user.id,
             name: siteName,
-          })
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          }])
           .select()
           .single();
         
         if (siteError) throw siteError;
         
         // Create bot via REST API
+        const botId = crypto.randomUUID();
         const { data: botData, error: botError } = await supabaseRestClient
           .from('bots')
-          .insert({
+          .insert([{
+            id: botId,
             siteId: siteData.id,
             name: botName,
             welcomeMessage: welcomeMessage || null,
             status: 'draft',
-            widgetSettings: {},
-          })
+            widgetSettings: '{}',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          }])
           .select()
           .single();
         
@@ -228,7 +240,7 @@ export async function POST(request: Request) {
       } catch (restError: any) {
         console.error("REST API fallback also failed:", restError.message);
         return NextResponse.json(
-          { error: "Database connection failed", message: "Unable to create bot at this time. Please try again later." },
+          { error: "Unable to create bot at this time. Please try again later." },
           { status: 503 },
         );
       }

@@ -4,6 +4,7 @@ import { authOptions } from "~/server/auth";
 import { db } from "~/lib/db";
 import { encryptApiKey, decryptApiKey } from "~/server/services/encryption";
 import OpenAI from "openai";
+import { supabaseRestClient } from "~/lib/supabaseRestClient";
 
 /**
  * POST /api/bots/[botId]/api-key
@@ -31,7 +32,7 @@ export async function POST(
       );
     }
 
-    // Verify bot ownership using raw query
+    // Verify bot ownership using raw query with REST API fallback
     let bot: any = null;
     try {
       const bots: any[] = await db.$queryRaw`
@@ -45,12 +46,29 @@ export async function POST(
       if (bots.length > 0) {
         bot = bots[0];
       }
-    } catch (dbError) {
-      console.error("Database query failed:", dbError);
-      return NextResponse.json(
-        { error: "Database connection failed" },
-        { status: 500 },
-      );
+    } catch (dbError: any) {
+      // Try REST API fallback
+      console.warn("Database query failed, falling back to REST API:", dbError.message);
+      try {
+        const { data: bots, error: restError } = await supabaseRestClient
+          .from('bots')
+          .select('id, siteId, sites(userId)')
+          .eq('id', botId)
+          .eq('sites.userId', session.user.id)
+          .limit(1)
+          .single();
+        
+        if (restError) throw restError;
+        if (bots) {
+          bot = { id: bots.id, userId: session.user.id };
+        }
+      } catch (restError: any) {
+        console.error("REST API fallback also failed:", restError.message);
+        return NextResponse.json(
+          { error: "Unable to verify bot ownership at this time. Please try again later." },
+          { status: 503 },
+        );
+      }
     }
 
     if (!bot) {
@@ -79,19 +97,33 @@ export async function POST(
 
     const encryptedKey = encryptApiKey(apiKey, encryptionKey);
 
-    // Update bot with encrypted API key using raw query
+    // Update bot with encrypted API key using raw query with REST API fallback
     try {
       await db.$executeRaw`
         UPDATE bots
         SET "openaiApiKeyEncrypted" = ${encryptedKey}, "updatedAt" = NOW()
         WHERE id = ${botId}
       `;
-    } catch (updateError) {
-      console.error("Failed to update bot API key:", updateError);
-      return NextResponse.json(
-        { error: "Failed to save API key" },
-        { status: 500 },
-      );
+    } catch (updateError: any) {
+      // Try REST API fallback
+      console.warn("Database update failed, falling back to REST API:", updateError.message);
+      try {
+        const { error: restError } = await supabaseRestClient
+          .from('bots')
+          .update({ 
+            openaiApiKeyEncrypted: encryptedKey,
+            updatedAt: new Date().toISOString()
+          })
+          .eq('id', botId);
+        
+        if (restError) throw restError;
+      } catch (restError: any) {
+        console.error("REST API fallback also failed:", restError.message);
+        return NextResponse.json(
+          { error: "Failed to save API key. Please try again later." },
+          { status: 503 },
+        );
+      }
     }
 
     return NextResponse.json({

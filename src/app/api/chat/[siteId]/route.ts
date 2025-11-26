@@ -52,7 +52,7 @@ export async function POST(
           bot = siteBots[0];
         }
       }
-    } catch (dbError) {
+    } catch (dbError: any) {
       console.warn("Database connection failed, falling back to REST API:", dbError.message);
       useRestApi = true;
       
@@ -61,7 +61,7 @@ export async function POST(
         // Try to find bot by ID directly
         const { data: botData, error: botError } = await supabaseRestClient
           .from('bots')
-          .select('id, siteId, openaiApiKeyEncrypted')
+          .select('id, siteId, openaiApiKeyEncrypted, sites(apiKeyEncrypted)')
           .eq('id', siteId)
           .limit(1)
           .single();
@@ -70,7 +70,7 @@ export async function POST(
           // If not found, try to find bot by siteId
           const { data: siteBotData, error: siteBotError } = await supabaseRestClient
             .from('bots')
-            .select('id, siteId, openaiApiKeyEncrypted')
+            .select('id, siteId, openaiApiKeyEncrypted, sites(apiKeyEncrypted)')
             .eq('siteId', siteId)
             .limit(1)
             .single();
@@ -81,11 +81,11 @@ export async function POST(
         } else if (botData) {
           bot = botData;
         }
-      } catch (restError) {
-        console.error("REST API fallback also failed:", restError);
+      } catch (restError: any) {
+        console.error("REST API fallback also failed:", restError.message);
         return NextResponse.json(
-          { error: "Database connection failed" },
-          { status: 500 },
+          { error: "Service unavailable. Please try again later." },
+          { status: 503 },
         );
       }
     }
@@ -94,17 +94,35 @@ export async function POST(
     let site: any = null;
     if (!bot) {
       try {
-        const sites: any[] = await db.$queryRaw`
-          SELECT id, "apiKeyEncrypted"
-          FROM sites
-          WHERE id = ${siteId}
-          LIMIT 1
-        `;
-        
-        if (sites.length > 0) {
-          site = sites[0];
+        if (!useRestApi) {
+          const sites: any[] = await db.$queryRaw`
+            SELECT id, "apiKeyEncrypted"
+            FROM sites
+            WHERE id = ${siteId}
+            LIMIT 1
+          `;
+          
+          if (sites.length > 0) {
+            site = sites[0];
+          }
+        } else {
+          // Use REST API for site lookup
+          try {
+            const { data: siteData, error: siteError } = await supabaseRestClient
+              .from('sites')
+              .select('id, apiKeyEncrypted')
+              .eq('id', siteId)
+              .limit(1)
+              .single();
+            
+            if (!siteError && siteData) {
+              site = siteData;
+            }
+          } catch (restError: any) {
+            console.error("REST API fallback for site also failed:", restError.message);
+          }
         }
-      } catch (dbError) {
+      } catch (dbError: any) {
         if (useRestApi) {
           // Already using REST API, so try REST API for site too
           try {
@@ -118,11 +136,11 @@ export async function POST(
             if (!siteError && siteData) {
               site = siteData;
             }
-          } catch (restError) {
-            console.error("REST API fallback for site also failed:", restError);
+          } catch (restError: any) {
+            console.error("REST API fallback for site also failed:", restError.message);
           }
         } else {
-          console.error("Database query failed:", dbError);
+          console.error("Database query failed:", dbError.message);
           return NextResponse.json(
             { error: "Database connection failed" },
             { status: 500 },
@@ -138,7 +156,7 @@ export async function POST(
     // Get API key from bot or site
     let apiKeyEncrypted = null;
     if (bot) {
-      apiKeyEncrypted = bot.openaiApiKeyEncrypted;
+      apiKeyEncrypted = bot.openaiApiKeyEncrypted || (bot.sites ? bot.sites.apiKeyEncrypted : null);
     } else if (site) {
       apiKeyEncrypted = site.apiKeyEncrypted;
     }
@@ -194,24 +212,59 @@ Answer the user's question based on the context above. Be concise and helpful.`;
     const visitorIdFinal = visitorId ?? crypto.randomUUID();
     
     try {
-      // Try to find existing conversation
-      const conversations: any[] = await db.$queryRaw`
-        SELECT id, messages, "botId", "siteId"
-        FROM conversations
-        WHERE COALESCE("botId", "siteId") = ${contextId} AND "visitorId" = ${visitorIdFinal}
-        ORDER BY "updatedAt" DESC
-        LIMIT 1
-      `;
-      
-      if (conversations.length > 0) {
-        conversation = conversations[0];
+      if (!useRestApi) {
+        // Try to find existing conversation
+        const conversations: any[] = await db.$queryRaw`
+          SELECT id, messages, "botId", "siteId"
+          FROM conversations
+          WHERE COALESCE("botId", "siteId") = ${contextId} AND "visitorId" = ${visitorIdFinal}
+          ORDER BY "updatedAt" DESC
+          LIMIT 1
+        `;
+        
+        if (conversations.length > 0) {
+          conversation = conversations[0];
+        }
+      } else {
+        // Try REST API for conversation lookup
+        try {
+          const { data: convData, error: convError } = await supabaseRestClient
+            .from('conversations')
+            .select('id, messages, botId, siteId')
+            .eq('visitorId', visitorIdFinal)
+            .or(`botId.eq.${contextId},siteId.eq.${contextId}`)
+            .order('updatedAt', { ascending: false })
+            .limit(1)
+            .single();
+          
+          if (!convError && convData) {
+            conversation = convData;
+          }
+        } catch (restError: any) {
+          console.warn("REST API fallback for conversation lookup failed:", restError.message);
+        }
       }
-    } catch (dbError) {
+    } catch (dbError: any) {
       if (useRestApi) {
         // Try REST API for conversation
-        console.warn("Database connection failed for conversation lookup, REST API fallback not implemented for this operation");
+        try {
+          const { data: convData, error: convError } = await supabaseRestClient
+            .from('conversations')
+            .select('id, messages, botId, siteId')
+            .eq('visitorId', visitorIdFinal)
+            .or(`botId.eq.${contextId},siteId.eq.${contextId}`)
+            .order('updatedAt', { ascending: false })
+            .limit(1)
+            .single();
+          
+          if (!convError && convData) {
+            conversation = convData;
+          }
+        } catch (restError: any) {
+          console.warn("REST API fallback for conversation lookup failed:", restError.message);
+        }
       } else {
-        console.error("Database query failed:", dbError);
+        console.error("Database query failed:", dbError.message);
       }
     }
 
@@ -235,30 +288,64 @@ Answer the user's question based on the context above. Be concise and helpful.`;
     if (conversation) {
       // Update existing conversation
       try {
-        await db.$executeRaw`
-          UPDATE conversations
-          SET messages = ${JSON.stringify(messages)}, "updatedAt" = NOW()
-          WHERE id = ${conversation.id}
-        `;
-      } catch (updateError) {
-        if (useRestApi) {
-          console.warn("Database update failed, REST API fallback not implemented for this operation");
+        if (!useRestApi) {
+          await db.$executeRaw`
+            UPDATE conversations
+            SET messages = ${JSON.stringify(messages)}, "updatedAt" = NOW()
+            WHERE id = ${conversation.id}
+          `;
         } else {
-          console.error("Failed to update conversation:", updateError);
+          // Use REST API for update
+          const { error: updateError } = await supabaseRestClient
+            .from('conversations')
+            .update({
+              messages: messages,
+              updatedAt: new Date().toISOString()
+            })
+            .eq('id', conversation.id);
+          
+          if (updateError) {
+            throw updateError;
+          }
+        }
+      } catch (updateError: any) {
+        if (useRestApi) {
+          console.warn("Database update failed, REST API fallback also failed:", updateError.message);
+        } else {
+          console.error("Failed to update conversation:", updateError.message);
         }
       }
     } else {
       // Create new conversation
       try {
-        await db.$executeRaw`
-          INSERT INTO conversations (id, "botId", "siteId", "visitorId", messages, "createdAt", "updatedAt")
-          VALUES (${crypto.randomUUID()}, ${bot ? bot.id : null}, ${site ? site.id : null}, ${visitorIdFinal}, ${JSON.stringify(messages)}, NOW(), NOW())
-        `;
-      } catch (insertError) {
-        if (useRestApi) {
-          console.warn("Database insert failed, REST API fallback not implemented for this operation");
+        if (!useRestApi) {
+          await db.$executeRaw`
+            INSERT INTO conversations (id, "botId", "siteId", "visitorId", messages, "createdAt", "updatedAt")
+            VALUES (${crypto.randomUUID()}, ${bot ? bot.id : null}, ${site ? site.id : null}, ${visitorIdFinal}, ${JSON.stringify(messages)}, NOW(), NOW())
+          `;
         } else {
-          console.error("Failed to create conversation:", insertError);
+          // Use REST API for insert
+          const { error: insertError } = await supabaseRestClient
+            .from('conversations')
+            .insert([{
+              id: crypto.randomUUID(),
+              botId: bot ? bot.id : null,
+              siteId: site ? site.id : null,
+              visitorId: visitorIdFinal,
+              messages: messages,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            }]);
+          
+          if (insertError) {
+            throw insertError;
+          }
+        }
+      } catch (insertError: any) {
+        if (useRestApi) {
+          console.warn("Database insert failed, REST API fallback also failed:", insertError.message);
+        } else {
+          console.error("Failed to create conversation:", insertError.message);
         }
       }
     }

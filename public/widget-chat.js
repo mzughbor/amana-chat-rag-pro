@@ -158,14 +158,24 @@
                 });
 
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(`HTTP error! status: ${response.status}, message: ${errorData.error || errorData.message || 'Unknown error'}`);
                 }
 
                 const data = await response.json();
                 return data.response;
             } catch (error) {
                 console.error('Error sending message:', error);
-                return 'Sorry, I encountered an error. Please try again.';
+                // Provide more specific error messages based on the type of error
+                if (error.message.includes('503')) {
+                    return 'Service temporarily unavailable. Please try again in a moment.';
+                } else if (error.message.includes('500')) {
+                    return 'Server error occurred. Please try again.';
+                } else if (error.message.includes('404')) {
+                    return 'Bot or site not found. Please check your configuration.';
+                } else {
+                    return 'Sorry, I encountered an error. Please try again.';
+                }
             }
         }
 
