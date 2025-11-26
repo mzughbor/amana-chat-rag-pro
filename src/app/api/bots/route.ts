@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "~/server/auth";
 import { db } from "~/lib/db";
-import { getSitesByUserEmail } from "~/lib/supabaseRestClient";
+import { getSitesByUserEmail, supabaseRestClient } from "~/lib/supabaseRestClient";
+import crypto from "crypto";
 
 /**
  * GET /api/bots
@@ -18,50 +19,43 @@ export async function GET() {
 
     // Try to fetch user's sites with their bots from database first
     try {
-      // Fetch user's sites with their bots
-      const userSites = await db.site.findMany({
-        where: {
-          userId: session.user.id,
-        },
-        include: {
-          bot: {
-            include: {
-              _count: {
-                select: {
-                  documents: true,
-                  conversations: true,
-                  qaPairs: true,
-                },
-              },
-            },
-          },
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
-      });
+      // Use raw query to match actual schema
+      const sites: any[] = await db.$queryRaw`
+        SELECT 
+          s.id as site_id,
+          s."userId",
+          s.name as site_name,
+          s.domain,
+          s."createdAt" as site_created_at,
+          b.id as bot_id,
+          b.name as bot_name,
+          b."welcomeMessage",
+          b.status,
+          b."widgetSettings",
+          b."createdAt" as bot_created_at,
+          b."updatedAt" as bot_updated_at
+        FROM sites s
+        LEFT JOIN bots b ON s.id = b."siteId"
+        WHERE s."userId" = ${session.user.id}
+        ORDER BY s."createdAt" DESC
+      `;
 
       // Transform to bot format
-      const bots = userSites
-        .filter((site) => site.bot !== null)
+      const bots = sites
+        .filter((site) => site.bot_id !== null)
         .map((site) => ({
-          id: site.bot!.id,
-          siteId: site.id,
-          name: site.bot!.name,
-          welcomeMessage: site.bot!.welcomeMessage,
-          status: site.bot!.status,
-          widgetSettings: site.bot!.widgetSettings,
-          createdAt: site.bot!.createdAt,
-          updatedAt: site.bot!.updatedAt,
+          id: site.bot_id,
+          siteId: site.site_id,
+          name: site.bot_name,
+          welcomeMessage: site.welcomeMessage,
+          status: site.status,
+          widgetSettings: site.widgetSettings || {},
+          createdAt: site.bot_created_at,
+          updatedAt: site.bot_updated_at,
           site: {
-            id: site.id,
-            name: site.name,
+            id: site.site_id,
+            name: site.site_name,
             domain: site.domain,
-          },
-          _count: {
-            documents: site.bot!._count.documents,
-            conversations: site.bot!._count.conversations,
-            qaPairs: site.bot!._count.qaPairs,
           },
         }));
 
@@ -71,29 +65,33 @@ export async function GET() {
       console.warn("Database connection failed, falling back to REST API:", dbError.message);
       
       try {
-        const userSites = await getSitesByUserEmail(session.user.email!);
-        
-        // Transform to bot format (simplified since REST API doesn't include bot details)
-        const bots = userSites.map((site: any) => ({
-          id: site.id, // Using site ID as bot ID for now
-          siteId: site.id,
-          name: site.name,
-          welcomeMessage: null,
-          status: "draft",
-          widgetSettings: site.widgetSettings || {},
-          createdAt: site.createdAt,
-          updatedAt: site.createdAt,
-          site: {
-            id: site.id,
-            name: site.name,
-            domain: null,
-          },
-          _count: {
-            documents: 0,
-            conversations: 0,
-            qaPairs: 0,
-          },
-        }));
+        // Try to get sites with bots via REST API
+        const { data: sites, error: sitesError } = await supabaseRestClient
+          .from('sites')
+          .select('id, name, domain, userId, createdAt, bots(id, name, welcomeMessage, status, widgetSettings, createdAt, updatedAt)')
+          .eq('userId', session.user.id)
+          .order('createdAt', { ascending: false });
+
+        if (sitesError) throw sitesError;
+
+        // Transform to bot format
+        const bots = sites
+          .filter((site: any) => site.bots && site.bots.length > 0)
+          .map((site: any) => ({
+            id: site.bots[0].id,
+            siteId: site.id,
+            name: site.bots[0].name,
+            welcomeMessage: site.bots[0].welcomeMessage,
+            status: site.bots[0].status,
+            widgetSettings: site.bots[0].widgetSettings || {},
+            createdAt: site.bots[0].createdAt,
+            updatedAt: site.bots[0].updatedAt,
+            site: {
+              id: site.id,
+              name: site.name,
+              domain: site.domain,
+            },
+          }));
 
         return NextResponse.json(bots);
       } catch (restError: any) {
@@ -132,49 +130,108 @@ export async function POST(request: Request) {
       );
     }
 
-    // Try to create site and bot in a transaction
+    // Try to create site and bot in database first
     try {
-      // Create site and bot in a transaction
-      const result = await db.$transaction(async (tx) => {
-        // Create site
-        const site = await tx.site.create({
-          data: {
-            name: siteName,
-            userId: session.user.id!,
-            settings: {},
-          },
+      // Use raw queries to match actual schema
+      const siteId = crypto.randomUUID();
+      const botId = crypto.randomUUID();
+      
+      // Create site
+      await db.$executeRaw`
+        INSERT INTO sites (id, "userId", name, "createdAt", "updatedAt")
+        VALUES (${siteId}, ${session.user.id}, ${siteName}, NOW(), NOW())
+      `;
+      
+      // Create bot
+      await db.$executeRaw`
+        INSERT INTO bots (id, "siteId", name, "welcomeMessage", status, "widgetSettings", "createdAt", "updatedAt")
+        VALUES (${botId}, ${siteId}, ${botName}, ${welcomeMessage || null}, 'draft', '{}', NOW(), NOW())
+      `;
+      
+      // Fetch the created bot
+      const bots: any[] = await db.$queryRaw`
+        SELECT 
+          b.id,
+          b."siteId",
+          b.name,
+          b."welcomeMessage",
+          b.status,
+          b."createdAt",
+          b."updatedAt",
+          s.name as site_name
+        FROM bots b
+        JOIN sites s ON b."siteId" = s.id
+        WHERE b.id = ${botId}
+      `;
+      
+      if (bots.length > 0) {
+        const bot = bots[0];
+        return NextResponse.json({
+          id: bot.id,
+          siteId: bot.siteId,
+          name: bot.name,
+          welcomeMessage: bot.welcomeMessage,
+          status: bot.status,
+          createdAt: bot.createdAt,
+          updatedAt: bot.updatedAt,
+          site: {
+            name: bot.site_name
+          }
         });
-
-        // Create bot for the site
-        const bot = await tx.bot.create({
-          data: {
-            siteId: site.id,
+      } else {
+        throw new Error("Failed to fetch created bot");
+      }
+    } catch (dbError: any) {
+      // If database connection fails, try REST API
+      console.warn("Database connection failed when creating bot, falling back to REST API:", dbError.message);
+      
+      try {
+        // Create site via REST API
+        const { data: siteData, error: siteError } = await supabaseRestClient
+          .from('sites')
+          .insert({
+            userId: session.user.id,
+            name: siteName,
+          })
+          .select()
+          .single();
+        
+        if (siteError) throw siteError;
+        
+        // Create bot via REST API
+        const { data: botData, error: botError } = await supabaseRestClient
+          .from('bots')
+          .insert({
+            siteId: siteData.id,
             name: botName,
             welcomeMessage: welcomeMessage || null,
-            openaiApiKeyEncrypted: apiKey || null, // Will be encrypted by the API key endpoint
-            status: "draft",
+            status: 'draft',
             widgetSettings: {},
-          },
+          })
+          .select()
+          .single();
+        
+        if (botError) throw botError;
+        
+        return NextResponse.json({
+          id: botData.id,
+          siteId: botData.siteId,
+          name: botData.name,
+          welcomeMessage: botData.welcomeMessage,
+          status: botData.status,
+          createdAt: botData.createdAt,
+          updatedAt: botData.updatedAt,
+          site: {
+            name: siteData.name
+          }
         });
-
-        return { site, bot };
-      });
-
-      return NextResponse.json({
-        id: result.bot.id,
-        siteId: result.site.id,
-        name: result.bot.name,
-        welcomeMessage: result.bot.welcomeMessage,
-        status: result.bot.status,
-        createdAt: result.bot.createdAt,
-      });
-    } catch (dbError: any) {
-      // If database connection fails, return error
-      console.error("Database connection failed when creating bot:", dbError.message);
-      return NextResponse.json(
-        { error: "Database connection failed", message: "Unable to create bot at this time. Please try again later." },
-        { status: 503 },
-      );
+      } catch (restError: any) {
+        console.error("REST API fallback also failed:", restError.message);
+        return NextResponse.json(
+          { error: "Database connection failed", message: "Unable to create bot at this time. Please try again later." },
+          { status: 503 },
+        );
+      }
     }
   } catch (error: any) {
     console.error("Error creating bot:", error);

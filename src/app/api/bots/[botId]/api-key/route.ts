@@ -31,15 +31,27 @@ export async function POST(
       );
     }
 
-    // Verify bot ownership
-    const bot = await db.bot.findFirst({
-      where: {
-        id: botId,
-        site: {
-          userId: session.user.id,
-        },
-      },
-    });
+    // Verify bot ownership using raw query
+    let bot: any = null;
+    try {
+      const bots: any[] = await db.$queryRaw`
+        SELECT b.id, s."userId"
+        FROM bots b
+        JOIN sites s ON b."siteId" = s.id
+        WHERE b.id = ${botId} AND s."userId" = ${session.user.id}
+        LIMIT 1
+      `;
+      
+      if (bots.length > 0) {
+        bot = bots[0];
+      }
+    } catch (dbError) {
+      console.error("Database query failed:", dbError);
+      return NextResponse.json(
+        { error: "Database connection failed" },
+        { status: 500 },
+      );
+    }
 
     if (!bot) {
       return NextResponse.json({ error: "Bot not found" }, { status: 404 });
@@ -67,11 +79,20 @@ export async function POST(
 
     const encryptedKey = encryptApiKey(apiKey, encryptionKey);
 
-    // Update bot with encrypted API key
-    await db.bot.update({
-      where: { id: botId },
-      data: { openaiApiKeyEncrypted: encryptedKey },
-    });
+    // Update bot with encrypted API key using raw query
+    try {
+      await db.$executeRaw`
+        UPDATE bots
+        SET "openaiApiKeyEncrypted" = ${encryptedKey}, "updatedAt" = NOW()
+        WHERE id = ${botId}
+      `;
+    } catch (updateError) {
+      console.error("Failed to update bot API key:", updateError);
+      return NextResponse.json(
+        { error: "Failed to save API key" },
+        { status: 500 },
+      );
+    }
 
     return NextResponse.json({
       success: true,
@@ -88,4 +109,3 @@ export async function POST(
     );
   }
 }
-
