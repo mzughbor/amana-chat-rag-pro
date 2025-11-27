@@ -218,7 +218,7 @@ export default function DashboardPage() {
                       setShowBotSettings(true);
                     }}
                   >
-                    Settings
+                    Edit Bot Settings
                   </Button>
                   <Link href={`/chat/${bot.id}`} className="flex-1">
                     <Button
@@ -293,6 +293,7 @@ export default function DashboardPage() {
             setSelectedBot(null);
           }}
           bot={selectedBot}
+          onSettingsUpdated={fetchUserSites}
         />
       )}
 

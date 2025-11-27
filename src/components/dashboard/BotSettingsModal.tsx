@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import Modal from "~/components/ui/Modal";
 import Button from "~/components/ui/Button";
+import Toast from "~/components/ui/Toast";
 
 interface Bot {
   id: string;
@@ -15,42 +16,25 @@ interface BotSettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   bot: Bot;
+  onSettingsUpdated?: () => void;
 }
 
 export default function BotSettingsModal({
   isOpen,
   onClose,
   bot,
+  onSettingsUpdated,
 }: BotSettingsModalProps) {
-  const [copied, setCopied] = useState(false);
-  const [primaryColor, setPrimaryColor] = useState("#6B46C1");
-  const [cornerRadius, setCornerRadius] = useState("rounded-full");
+  const [loadingSettings, setLoadingSettings] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-  
-  // Generate widget URL with current settings
-  const widgetUrl = typeof window !== "undefined" ? window.location.origin : "";
-  
-  // Convert cornerRadius Tailwind class to CSS border-radius value for widget
-  const getCornerRadiusValue = (radius: string): string => {
-    const radiusMap: Record<string, string> = {
-      "rounded-none": "0px",
-      "rounded-lg": "8px",
-      "rounded-2xl": "16px",
-      "rounded-full": "50%",
-    };
-    return radiusMap[radius] || "50%";
-  };
-  
-  // Generate snippet with current settings - updates automatically when settings change
-  const snippet = useMemo(() => {
-    const params = new URLSearchParams({
-      siteId: bot.id,
-      color: primaryColor.replace("#", ""), // Remove # for URL
-      radius: getCornerRadiusValue(cornerRadius),
-    });
-    return `<script src="${widgetUrl}/widget.js?${params.toString()}"></script>`;
-  }, [bot.id, primaryColor, cornerRadius, widgetUrl]);
+  const [welcomeMessage, setWelcomeMessage] = useState(
+    bot.welcomeMessage || "Hello! How can I help you today?",
+  );
+  const [apiKey, setApiKey] = useState("");
+  const [error, setError] = useState("");
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
+  const [toastType, setToastType] = useState<"success" | "error" | "info">("info");
 
   // Load existing widget settings when modal opens
   useEffect(() => {
@@ -60,6 +44,8 @@ export default function BotSettingsModal({
   }, [isOpen, bot.id]);
 
   const loadWidgetSettings = async () => {
+    setLoadingSettings(true);
+    setError("");
     try {
       const response = await fetch(`/api/bots/${bot.id}/widget-settings`, {
         method: "GET",
@@ -68,259 +54,174 @@ export default function BotSettingsModal({
         },
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        const settings = data.widgetSettings || {};
-        
-        if (settings.primaryColor) {
-          setPrimaryColor(settings.primaryColor);
-        }
-        if (settings.cornerRadius) {
-          // Convert CSS value back to Tailwind class for display
-          const cssToTailwind: Record<string, string> = {
-            "0px": "rounded-none",
-            "8px": "rounded-lg",
-            "16px": "rounded-2xl",
-            "50%": "rounded-full",
-          };
-          setCornerRadius(cssToTailwind[settings.cornerRadius] || "rounded-full");
-        }
-      } else {
-        // If no settings found, use defaults
-        setPrimaryColor("#6B46C1");
-        setCornerRadius("rounded-full");
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to load settings (${response.status})`);
       }
-    } catch (error) {
-      console.error("Error loading widget settings:", error);
-      // Use defaults on error
-      setPrimaryColor("#6B46C1");
-      setCornerRadius("rounded-full");
+
+      const data = await response.json();
+      const settings = data.widgetSettings || {};
+
+      setWelcomeMessage(
+        typeof settings.welcomeMessage === "string" && settings.welcomeMessage.length > 0
+          ? settings.welcomeMessage
+          : bot.welcomeMessage || "Hello! How can I help you today?",
+      );
+      setApiKey(settings.apiKey || "");
+    } catch (err) {
+      console.error("Error loading bot settings:", err);
+      const message = err instanceof Error ? err.message : "Failed to load bot settings.";
+      setError(message);
+      setToastMessage(message);
+      setToastType("error");
+      setToastVisible(true);
+    } finally {
+      setLoadingSettings(false);
     }
   };
 
-  const saveWidgetSettings = async () => {
+  const saveBotSettings = async () => {
     setSaving(true);
-    setSaveSuccess(false);
-    
+    setError("");
     try {
-      // Convert Tailwind class to CSS value before saving
-      const widgetSettings = {
-        primaryColor,
-        cornerRadius: getCornerRadiusValue(cornerRadius), // Convert to CSS value
+      const widgetSettingsPayload = {
+        widgetSettings: {
+          welcomeMessage,
+          ...(apiKey ? { apiKey } : {}),
+        },
       };
 
-      const response = await fetch(`/api/bots/${bot.id}/widget-settings`, {
+      const widgetResponse = await fetch(`/api/bots/${bot.id}/widget-settings`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ widgetSettings }),
+        body: JSON.stringify(widgetSettingsPayload),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || errorData.error || "Failed to save widget settings");
+      if (!widgetResponse.ok) {
+        const errorData = await widgetResponse.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to save widget settings.");
       }
 
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 2000);
-    } catch (error) {
-      console.error("Error saving widget settings:", error);
-      alert(`Failed to save widget settings: ${error instanceof Error ? error.message : "Unknown error"}`);
+      const botResponse = await fetch(`/api/bots/${bot.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ welcomeMessage }),
+      });
+
+      if (!botResponse.ok) {
+        const errorData = await botResponse.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to update bot welcome message.");
+      }
+
+      setToastMessage("Bot settings updated successfully!");
+      setToastType("success");
+      setToastVisible(true);
+      onSettingsUpdated?.();
+      onClose();
+    } catch (err) {
+      console.error("Error saving bot settings:", err);
+      const message = err instanceof Error ? err.message : "Failed to save bot settings.";
+      setError(message);
+      setToastMessage(message);
+      setToastType("error");
+      setToastVisible(true);
     } finally {
       setSaving(false);
     }
   };
 
-  const handleCopyCode = () => {
-    navigator.clipboard.writeText(snippet);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Bot Settings" size="lg">
+    <Modal isOpen={isOpen} onClose={onClose} title={`Edit ${bot.name}`} size="lg">
       <div className="space-y-6">
-        {/* Widget Preview */}
+        {loadingSettings && (
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600">
+            Loading bot settings...
+          </div>
+        )}
+        {error && !loadingSettings && (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
+        {/* Welcome Message */}
         <div>
-          <h3 className="text-lg font-semibold text-slate-900 mb-4">
-            Widget Preview
-          </h3>
-          <div className="relative border-2 border-gray-200 rounded-2xl p-8 bg-gray-50 min-h-[300px] flex items-center justify-center">
-            <div className="absolute bottom-6 right-6">
-              {/* Floating Chat Button Preview */}
-              <div
-                className={`w-14 h-14 ${cornerRadius} shadow-lg flex items-center justify-center cursor-pointer transition-all hover:scale-110`}
-                style={{ backgroundColor: primaryColor }}
-              >
-                <svg
-                  className="w-6 h-6 text-white"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
+          <label className="block text-sm font-medium text-gray-900 mb-2">
+            Welcome Message
+          </label>
+          <textarea
+            value={welcomeMessage}
+            onChange={(e) => setWelcomeMessage(e.target.value)}
+            rows={4}
+            className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-purple-600 focus:outline-none focus:ring-2 focus:ring-purple-200"
+            placeholder="Hello! How can I help you today?"
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            This message appears at the top of the chat and test widget preview.
+          </p>
+        </div>
+
+        {/* API Key */}
+        <div>
+          <label className="block text-sm font-medium text-gray-900 mb-2">
+            Bot API Key (BYOK)
+          </label>
+          <input
+            type="password"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder="sk-..."
+            className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-purple-600 focus:outline-none focus:ring-2 focus:ring-purple-200"
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            We store your API key encrypted. Leave blank to keep the current key.
+          </p>
+        </div>
+
+        <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+          <Button variant="secondary" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={saveBotSettings}
+            disabled={saving || loadingSettings}
+          >
+            {saving ? (
+              <span className="flex items-center gap-2">
+                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
                   <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                   />
                 </svg>
-              </div>
-            </div>
-            <p className="text-sm text-slate-600 text-center">
-              This is how the chat widget will appear on your website
-            </p>
-          </div>
-        </div>
-
-        {/* Theme Controls */}
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-slate-900">
-              Theme Controls
-            </h3>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={saveWidgetSettings}
-              disabled={saving}
-            >
-              {saving ? (
-                <span className="flex items-center gap-2">
-                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                  Saving...
-                </span>
-              ) : saveSuccess ? (
-                <span className="flex items-center gap-2">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  Saved!
-                </span>
-              ) : (
-                "Save Settings"
-              )}
-            </Button>
-          </div>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Primary Color
-              </label>
-              <div className="flex items-center gap-4">
-                <input
-                  type="color"
-                  value={primaryColor}
-                  onChange={(e) => setPrimaryColor(e.target.value)}
-                  className="w-16 h-10 rounded-lg border border-gray-200 cursor-pointer"
-                />
-                <input
-                  type="text"
-                  value={primaryColor}
-                  onChange={(e) => setPrimaryColor(e.target.value)}
-                  className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 focus:border-purple-600"
-                  placeholder="#6B46C1"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Corner Radius
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {[
-                  { value: "rounded-none", label: "Square" },
-                  { value: "rounded-lg", label: "Small" },
-                  { value: "rounded-2xl", label: "Medium" },
-                  { value: "rounded-full", label: "Round" },
-                ].map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => setCornerRadius(option.value)}
-                    className={`px-4 py-2 rounded-lg border text-sm transition-colors ${
-                      cornerRadius === option.value
-                        ? "bg-purple-600 text-white border-purple-600"
-                        : "bg-white text-slate-700 border-gray-200 hover:bg-gray-50"
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Snippet Generator */}
-        <div>
-          <h3 className="text-lg font-semibold text-slate-900 mb-4">
-            Integration Code
-          </h3>
-          <div className="space-y-3">
-            <p className="text-sm text-slate-700">
-              Copy and paste this code snippet into your website to add the chat widget:
-            </p>
-            <div className="relative">
-              <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm font-mono">
-                <code className="break-all">{snippet}</code>
-              </pre>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handleCopyCode}
-                className="absolute top-2 right-2"
-              >
-                {copied ? (
-                  <span className="flex items-center gap-2">
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M5 13l4 4L19 7"
-                      />
-                    </svg>
-                    Copied!
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-2">
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                      />
-                    </svg>
-                    Copy Code
-                  </span>
-                )}
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        {/* Close Button */}
-        <div className="flex justify-end pt-4 border-t border-gray-200">
-          <Button variant="secondary" onClick={onClose}>
-            Close
+                Saving...
+              </span>
+            ) : (
+              "Save Changes"
+            )}
           </Button>
         </div>
       </div>
+      <Toast
+        message={toastMessage}
+        type={toastType}
+        isVisible={toastVisible}
+        onClose={() => setToastVisible(false)}
+      />
     </Modal>
   );
 }
