@@ -139,9 +139,10 @@ export async function POST(request: NextRequest) {
     // Create Q&A pair (using raw query with REST API fallback)
     let qaPair: any = null;
     try {
+      const qaId = crypto.randomUUID();
       const qaPairs: any[] = await db.$queryRaw`
-        INSERT INTO qa_pairs ("botId", question, answer, status, "createdAt", "updatedAt")
-        VALUES (${bot.id}, ${question}, ${answer}, 'active', NOW(), NOW())
+        INSERT INTO qa_pairs (id, "botId", question, answer, status, "createdAt", "updatedAt")
+        VALUES (${qaId}, ${bot.id}, ${question}, ${answer}, 'active', NOW(), NOW())
         RETURNING id, "botId", question, answer, status, "createdAt", "updatedAt"
       `;
       
@@ -149,6 +150,13 @@ export async function POST(request: NextRequest) {
         qaPair = qaPairs[0];
       }
     } catch (insertError: any) {
+      console.error("Failed to create Q&A pair:", insertError);
+      console.error("Error details:", {
+        message: insertError.message,
+        code: insertError.code,
+        botId: bot.id,
+        question: question.substring(0, 50)
+      });
       if (useRestApi) {
         // Try REST API for Q&A pair creation
         try {

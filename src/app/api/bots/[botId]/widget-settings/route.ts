@@ -151,21 +151,37 @@ export async function PUT(
     let updatedBot: any = null;
     try {
       if (!useRestApi) {
-        await db.$executeRaw`
-          UPDATE bots
-          SET "widgetSettings" = ${JSON.stringify(widgetSettings)}, "updatedAt" = NOW()
-          WHERE id = ${botId}
-        `;
+        // Use Prisma.$executeRawUnsafe for JSONB update with proper casting
+        // Prisma template literals don't support ::jsonb cast, so we use unsafe method
+        const widgetSettingsJson = JSON.stringify(widgetSettings);
+        
+        await db.$executeRawUnsafe(
+          `UPDATE bots SET "widgetSettings" = $1::jsonb, "updatedAt" = NOW() WHERE id = $2`,
+          widgetSettingsJson,
+          botId
+        );
         
         // Fetch updated bot
         const updatedBots: any[] = await db.$queryRaw`
-          SELECT *
+          SELECT 
+            id,
+            "siteId",
+            name,
+            "welcomeMessage",
+            provider,
+            status,
+            "widgetSettings",
+            "scriptEmbedId",
+            "createdAt",
+            "updatedAt"
           FROM bots
           WHERE id = ${botId}
         `;
         
         if (updatedBots.length > 0) {
           updatedBot = updatedBots[0];
+        } else {
+          throw new Error("Bot not found after update");
         }
       } else {
         // Use REST API for update
@@ -183,9 +199,21 @@ export async function PUT(
         updatedBot = updatedData;
       }
     } catch (updateError: any) {
-      console.error("Database update failed:", updateError.message);
+      console.error("Database update failed:", updateError);
+      console.error("Error details:", {
+        message: updateError.message,
+        code: updateError.code,
+        botId,
+        widgetSettings: JSON.stringify(widgetSettings)
+      });
+      
+      // Return more detailed error for debugging
       return NextResponse.json(
-        { error: "Failed to update widget settings. Please try again later." },
+        { 
+          error: "Failed to update widget settings. Please try again later.",
+          details: updateError.message || "Unknown error",
+          code: updateError.code
+        },
         { status: 503 },
       );
     }

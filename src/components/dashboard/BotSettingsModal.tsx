@@ -76,7 +76,14 @@ export default function BotSettingsModal({
           setPrimaryColor(settings.primaryColor);
         }
         if (settings.cornerRadius) {
-          setCornerRadius(settings.cornerRadius);
+          // Convert CSS value back to Tailwind class for display
+          const cssToTailwind: Record<string, string> = {
+            "0px": "rounded-none",
+            "8px": "rounded-lg",
+            "16px": "rounded-2xl",
+            "50%": "rounded-full",
+          };
+          setCornerRadius(cssToTailwind[settings.cornerRadius] || "rounded-full");
         }
       } else {
         // If no settings found, use defaults
@@ -96,9 +103,10 @@ export default function BotSettingsModal({
     setSaveSuccess(false);
     
     try {
+      // Convert Tailwind class to CSS value before saving
       const widgetSettings = {
         primaryColor,
-        cornerRadius,
+        cornerRadius: getCornerRadiusValue(cornerRadius), // Convert to CSS value
       };
 
       const response = await fetch(`/api/bots/${bot.id}/widget-settings`, {
@@ -110,15 +118,15 @@ export default function BotSettingsModal({
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to save widget settings");
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || errorData.error || "Failed to save widget settings");
       }
 
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2000);
     } catch (error) {
       console.error("Error saving widget settings:", error);
-      alert("Failed to save widget settings. Please try again.");
+      alert(`Failed to save widget settings: ${error instanceof Error ? error.message : "Unknown error"}`);
     } finally {
       setSaving(false);
     }

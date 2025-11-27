@@ -2,6 +2,10 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Card from "~/components/ui/Card";
+import Modal from "~/components/ui/Modal";
+import Button from "~/components/ui/Button";
+import Toast from "~/components/ui/Toast";
 
 interface Document {
   id: string;
@@ -59,23 +63,39 @@ export default function UploadContent({
   const [editQuestion, setEditQuestion] = useState("");
   const [editAnswer, setEditAnswer] = useState("");
   const [deletingQaId, setDeletingQaId] = useState<string | null>(null);
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
+  const [toastType, setToastType] = useState<"success" | "error" | "info">("info");
+  const [showDeleteDocModal, setShowDeleteDocModal] = useState(false);
+  const [docToDelete, setDocToDelete] = useState<string | null>(null);
+  const [showDeleteQaModal, setShowDeleteQaModal] = useState(false);
+  const [qaToDelete, setQaToDelete] = useState<string | null>(null);
+  const [deletingDoc, setDeletingDoc] = useState(false);
+
+  // Fetch data when bot selection changes
+  const fetchBotData = async (targetBotId: string) => {
+    try {
+      // Reload page to fetch fresh data for the selected bot
+      // This ensures we get the latest documents and Q&A pairs from the server
+      window.location.href = `/upload?botId=${targetBotId}`;
+    } catch (error) {
+      console.error("Error fetching bot data:", error);
+      setToastMessage("Failed to load bot data");
+      setToastType("error");
+      setToastVisible(true);
+    }
+  };
 
   // Update data when bot selection changes
   useEffect(() => {
-    if (botId !== initialBotId) {
-      // In a real implementation, we would fetch new data for the selected bot
-      // For now, we'll just clear the current data
-      setDocuments([]);
-      setQaPairs([]);
+    if (botId && botId !== initialBotId) {
+      fetchBotData(botId);
     }
   }, [botId, initialBotId]);
 
-  const handleBotChange = (newBotId: string) => {
+  const handleBotChange = async (newBotId: string) => {
     setBotId(newBotId);
-    // In a real implementation, we would fetch data for the new bot
-    // For now, we'll just clear the current data
-    setDocuments([]);
-    setQaPairs([]);
+    await fetchBotData(newBotId);
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -122,8 +142,13 @@ export default function UploadContent({
       e.target.value = "";
       setSelectedFileName("");
       
-      // Reload the page to show the new document
-      window.location.reload();
+      // Show success message
+      setToastMessage("Document uploaded successfully! Processing...");
+      setToastType("success");
+      setToastVisible(true);
+      
+      // Refresh documents list
+      await fetchBotData(botId);
     } catch (error: any) {
       console.error("Upload error:", error);
       setUploading(false);
@@ -195,27 +220,38 @@ export default function UploadContent({
       setEditQuestion("");
       setEditAnswer("");
       
-      // Reload the page to show updated data
-      window.location.reload();
+      // Show success message
+      setToastMessage("Q&A pair updated successfully");
+      setToastType("success");
+      setToastVisible(true);
+      
+      // Refresh Q&A pairs list
+      await fetchBotData(botId);
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Failed to update Q&A pair");
+      setToastMessage(error instanceof Error ? error.message : "Failed to update Q&A pair");
+      setToastType("error");
+      setToastVisible(true);
     } finally {
       setQaSubmitting(false);
     }
   };
 
-  const handleDeleteQa = async (qaId: string) => {
-    if (!confirm("Are you sure you want to delete this Q&A pair?")) {
-      return;
-    }
+  const handleDeleteQaClick = (qaId: string) => {
+    setQaToDelete(qaId);
+    setShowDeleteQaModal(true);
+  };
 
-    setDeletingQaId(qaId);
+  const handleDeleteQaConfirm = async () => {
+    if (!qaToDelete) return;
+
+    setDeletingQaId(qaToDelete);
+    setShowDeleteQaModal(false);
 
     try {
       const response = await fetch("/api/content/qa", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: qaId, botId }),
+        body: JSON.stringify({ id: qaToDelete, botId }),
       });
 
       const data = await response.json();
@@ -224,22 +260,47 @@ export default function UploadContent({
         throw new Error(data.error || "Failed to delete Q&A pair");
       }
 
-      // Reload the page to show updated data
-      window.location.reload();
+      // Show success message
+      setToastMessage("Q&A pair deleted successfully");
+      setToastType("success");
+      setToastVisible(true);
+      
+      // Refresh Q&A pairs list
+      await fetchBotData(botId);
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Failed to delete Q&A pair");
+      setToastMessage(error instanceof Error ? error.message : "Failed to delete Q&A pair");
+      setToastType("error");
+      setToastVisible(true);
     } finally {
       setDeletingQaId(null);
+      setQaToDelete(null);
     }
   };
 
-  const handleDeleteDocument = async (docId: string) => {
-    if (!confirm("Are you sure you want to delete this document? This will remove all associated data.")) {
-      return;
-    }
+  const handleDeleteQaCancel = () => {
+    setShowDeleteQaModal(false);
+    setQaToDelete(null);
+  };
+
+  const handleDeleteQa = async (qaId: string) => {
+    // This function is kept for backward compatibility but now uses modal
+    handleDeleteQaClick(qaId);
+  };
+
+  const handleDeleteDocumentClick = (docId: string) => {
+    const doc = documents.find(d => d.id === docId);
+    setDocToDelete(docId);
+    setShowDeleteDocModal(true);
+  };
+
+  const handleDeleteDocumentConfirm = async () => {
+    if (!docToDelete) return;
+
+    setDeletingDoc(true);
+    setShowDeleteDocModal(false);
 
     try {
-      const response = await fetch(`/api/content/documents/${docId}`, {
+      const response = await fetch(`/api/content/documents/${docToDelete}`, {
         method: "DELETE",
         headers: { 
           "Content-Type": "application/json",
@@ -253,11 +314,31 @@ export default function UploadContent({
         throw new Error(data.error || "Failed to delete document");
       }
 
-      // Reload the page to show updated data
-      window.location.reload();
+      // Show success message
+      setToastMessage("Document deleted successfully");
+      setToastType("success");
+      setToastVisible(true);
+      
+      // Refresh documents list
+      await fetchBotData(botId);
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Failed to delete document");
+      setToastMessage(error instanceof Error ? error.message : "Failed to delete document");
+      setToastType("error");
+      setToastVisible(true);
+    } finally {
+      setDeletingDoc(false);
+      setDocToDelete(null);
     }
+  };
+
+  const handleDeleteDocumentCancel = () => {
+    setShowDeleteDocModal(false);
+    setDocToDelete(null);
+  };
+
+  const handleDeleteDocument = async (docId: string) => {
+    // This function is kept for backward compatibility but now uses modal
+    handleDeleteDocumentClick(docId);
   };
 
   const handleQASubmit = async (e: React.FormEvent) => {
@@ -277,13 +358,22 @@ export default function UploadContent({
         throw new Error(data.error || "Failed to add Q&A pair");
       }
 
-      // Reset form and reload
+      // Reset form
       setQuestion("");
       setAnswer("");
       setShowQAForm(false);
-      window.location.reload();
+      
+      // Show success message
+      setToastMessage("Q&A pair added successfully");
+      setToastType("success");
+      setToastVisible(true);
+      
+      // Refresh Q&A pairs list
+      await fetchBotData(botId);
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Failed to add Q&A pair");
+      setToastMessage(error instanceof Error ? error.message : "Failed to add Q&A pair");
+      setToastType("error");
+      setToastVisible(true);
     } finally {
       setQaSubmitting(false);
     }
@@ -291,52 +381,65 @@ export default function UploadContent({
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="bg-white shadow">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex h-16 items-center justify-between">
-            <Link href="/dashboard" className="text-xl font-semibold text-gray-900">
-              AmanaRAG
-            </Link>
-            <Link
-              href="/dashboard"
-              className="text-sm text-primary hover:text-primary/80"
+      <div className="mx-auto max-w-[1200px] px-6 md:px-8 py-8">
+        {/* Back to Dashboard Link */}
+        <div className="mb-6">
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-purple-600 transition-colors group"
+          >
+            <svg 
+              className="w-4 h-4 transition-transform group-hover:-translate-x-1" 
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
             >
-              Back to Dashboard
-            </Link>
-          </div>
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            <span>Back to Dashboard</span>
+          </Link>
         </div>
-      </div>
 
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Content Upload</h1>
-            <p className="mt-1 text-sm text-gray-600">
-              Upload PDF documents or add Q&A pairs to train your chatbot
-            </p>
-          </div>
-          
-          {/* Bot Selection Dropdown */}
-          {bots.length > 0 && (
-            <div className="flex items-center space-x-2">
-              <label htmlFor="bot-select" className="text-sm font-medium text-gray-700">
+        <div className="mb-8 animate-fade-in">
+          <h1 className="text-4xl font-bold text-gray-900 mb-2">Content Upload</h1>
+          <p className="text-lg text-gray-600">
+            Upload PDF documents or add Q&A pairs to train your chatbot
+          </p>
+        </div>
+
+        {/* Bot Selection Dropdown */}
+        {bots.length > 0 && (
+          <Card className="mb-6 animate-fade-in">
+            <div className="space-y-2">
+              <label htmlFor="bot-select" className="block text-sm font-medium text-gray-700">
                 Select Bot:
               </label>
               <select
                 id="bot-select"
                 value={botId}
                 onChange={(e) => handleBotChange(e.target.value)}
-                className="rounded-md border border-gray-300 bg-white py-2 px-3 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white text-gray-900"
               >
-                {bots.map((bot) => (
-                  <option key={bot.id} value={bot.id}>
-                    {bot.name}
-                  </option>
-                ))}
+                {bots.map((bot) => {
+                  const site = sites.find(s => s.id === bot.siteId);
+                  return (
+                    <option key={bot.id} value={bot.id}>
+                      {bot.name} {site?.name ? `(${site.name})` : ""}
+                    </option>
+                  );
+                })}
               </select>
+              {botId && (
+                <p className="text-sm text-gray-600 mt-2">
+                  Selected: <span className="font-medium">{bots.find(b => b.id === botId)?.name}</span>
+                  {sites.find(s => s.bots.some(b => b.id === botId)) && (
+                    <span className="text-gray-500"> • {sites.find(s => s.bots.some(b => b.id === botId))?.name}</span>
+                  )}
+                </p>
+              )}
             </div>
-          )}
-        </div>
+          </Card>
+        )}
 
         <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-2">
           {/* PDF Upload */}
@@ -560,10 +663,11 @@ export default function UploadContent({
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
                       <button
-                        onClick={() => handleDeleteDocument(doc.id)}
-                        className="text-red-600 hover:text-red-900"
+                        onClick={() => handleDeleteDocumentClick(doc.id)}
+                        disabled={deletingDoc && docToDelete === doc.id}
+                        className="text-red-600 hover:text-red-900 disabled:opacity-50"
                       >
-                        Delete
+                        {deletingDoc && docToDelete === doc.id ? "Deleting..." : "Delete"}
                       </button>
                     </td>
                   </tr>
@@ -667,7 +771,7 @@ export default function UploadContent({
                           Edit
                         </button>
                         <button
-                          onClick={() => handleDeleteQa(qa.id)}
+                          onClick={() => handleDeleteQaClick(qa.id)}
                           disabled={deletingQaId === qa.id}
                           className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-md text-red-700 bg-red-100 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50"
                         >
@@ -705,6 +809,140 @@ export default function UploadContent({
             )}
           </div>
         </div>
+
+        {/* Delete Document Confirmation Modal */}
+        <Modal
+          isOpen={showDeleteDocModal}
+          onClose={handleDeleteDocumentCancel}
+          title="Delete Document"
+          size="sm"
+        >
+          <div className="space-y-4">
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0">
+                <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+                  <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                  Are you sure you want to delete this document?
+                </h3>
+                <p className="text-sm text-slate-600 mb-4">
+                  This will permanently delete:
+                </p>
+                <ul className="text-sm text-slate-600 space-y-1 mb-4 list-disc list-inside">
+                  <li>The document</li>
+                  <li>All associated vectors</li>
+                  <li>All related data</li>
+                </ul>
+                <p className="text-sm font-medium text-red-600">
+                  This action cannot be undone.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end pt-4 border-t border-gray-200">
+              <Button
+                variant="secondary"
+                onClick={handleDeleteDocumentCancel}
+                disabled={deletingDoc}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleDeleteDocumentConfirm}
+                disabled={deletingDoc}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                {deletingDoc ? (
+                  <span className="flex items-center gap-2">
+                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Deleting...
+                  </span>
+                ) : (
+                  "Delete Document"
+                )}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+
+        {/* Delete Q&A Confirmation Modal */}
+        <Modal
+          isOpen={showDeleteQaModal}
+          onClose={handleDeleteQaCancel}
+          title="Delete Q&A Pair"
+          size="sm"
+        >
+          <div className="space-y-4">
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0">
+                <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+                  <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                  Are you sure you want to delete this Q&A pair?
+                </h3>
+                <p className="text-sm text-slate-600 mb-4">
+                  This will permanently delete:
+                </p>
+                <ul className="text-sm text-slate-600 space-y-1 mb-4 list-disc list-inside">
+                  <li>The Q&A pair</li>
+                  <li>Associated vector embeddings</li>
+                </ul>
+                <p className="text-sm font-medium text-red-600">
+                  This action cannot be undone.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end pt-4 border-t border-gray-200">
+              <Button
+                variant="secondary"
+                onClick={handleDeleteQaCancel}
+                disabled={deletingQaId !== null}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleDeleteQaConfirm}
+                disabled={deletingQaId !== null}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                {deletingQaId ? (
+                  <span className="flex items-center gap-2">
+                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Deleting...
+                  </span>
+                ) : (
+                  "Delete Q&A Pair"
+                )}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+
+        {/* Toast Notification */}
+        <Toast
+          message={toastMessage}
+          type={toastType}
+          isVisible={toastVisible}
+          onClose={() => setToastVisible(false)}
+          duration={3000}
+        />
       </div>
     </div>
   );

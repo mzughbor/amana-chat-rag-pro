@@ -164,16 +164,24 @@ export async function POST(request: NextRequest) {
     // Create document record (using raw query to match actual schema, with REST API fallback)
     let document: any = null;
     try {
+      const docId = randomUUID();
       const documents: any[] = await db.$queryRaw`
-        INSERT INTO documents ("botId", "sourceType", "fileName", "fileType", "fileSize", "storagePath", "status", "metadata", "createdAt", "updatedAt")
-        VALUES (${bot.id}, 'pdf', ${file.name}, ${file.type}, ${file.size}, '', 'processing', '{}', NOW(), NOW())
-        RETURNING id, "botId", "sourceType", "fileName", "fileType", "fileSize", "storagePath", "status", "metadata", "createdAt", "updatedAt"
+        INSERT INTO documents (id, "botId", "sourceType", "fileName", "fileType", "fileSize", "storagePath", "ingestionStatus", "metadata", "createdAt", "updatedAt")
+        VALUES (${docId}, ${bot.id}, 'pdf', ${file.name}, ${file.type}, ${file.size}, '', 'processing', '{}'::jsonb, NOW(), NOW())
+        RETURNING id, "botId", "sourceType", "fileName", "fileType", "fileSize", "storagePath", "ingestionStatus" as status, "metadata", "createdAt", "updatedAt"
       `;
       
       if (documents.length > 0) {
         document = documents[0];
       }
-    } catch (insertError) {
+    } catch (insertError: any) {
+      console.error("Failed to create document record:", insertError);
+      console.error("Error details:", {
+        message: insertError.message,
+        code: insertError.code,
+        botId: bot.id,
+        fileName: file.name
+      });
       if (useRestApi) {
         // Try REST API for document creation
         try {
@@ -187,7 +195,7 @@ export async function POST(request: NextRequest) {
               fileType: file.type,
               fileSize: file.size,
               storagePath: '',
-              status: 'processing',
+              ingestionStatus: 'processing',
               metadata: {},
               createdAt: new Date().toISOString(), // Add createdAt
               updatedAt: new Date().toISOString(), // Add updatedAt
@@ -328,7 +336,7 @@ export async function POST(request: NextRequest) {
           try {
             await db.$executeRaw`
               UPDATE documents 
-              SET status = 'failed', "errorMessage" = ${errorMessage}, "updatedAt" = NOW()
+              SET "ingestionStatus" = 'failed', "errorMessage" = ${errorMessage}, "updatedAt" = NOW()
               WHERE id = ${document.id}
             `;
           } catch (updateError) {
@@ -339,7 +347,7 @@ export async function POST(request: NextRequest) {
             await supabaseRestClient
               .from('documents')
               .update({ 
-                status: 'failed', 
+                ingestionStatus: 'failed', 
                 errorMessage: errorMessage 
               })
               .eq('id', document.id);
@@ -538,7 +546,7 @@ export async function POST(request: NextRequest) {
         try {
           await db.$executeRaw`
             UPDATE documents 
-            SET status = 'completed', "updatedAt" = NOW()
+            SET "ingestionStatus" = 'completed', "updatedAt" = NOW()
             WHERE id = ${document.id}
           `;
         } catch (updateError) {
@@ -548,7 +556,7 @@ export async function POST(request: NextRequest) {
         try {
           await supabaseRestClient
             .from('documents')
-            .update({ status: 'completed' })
+            .update({ ingestionStatus: 'completed' })
             .eq('id', document.id);
         } catch (restUpdateError) {
           console.error("Failed to update document status via REST API:", restUpdateError);
@@ -562,27 +570,29 @@ export async function POST(request: NextRequest) {
       });
     } catch (error) {
       console.error("Processing error:", error);
-      // Update document status to error (if document exists)
-      try {
-        const errorMessage = error instanceof Error ? error.message : "Unknown error";
-        if (!useRestApi) {
-          await db.$executeRaw`
-            UPDATE documents 
-            SET status = 'failed', "errorMessage" = ${errorMessage}, "updatedAt" = NOW()
-            WHERE id = ${document.id}
-          `;
-        } else {
-          await supabaseRestClient
-            .from('documents')
-            .update({ 
-              status: 'failed', 
-              errorMessage: errorMessage 
-            })
-            .eq('id', document.id);
+        // Update document status to error (if document exists)
+        try {
+          const errorMessage = error instanceof Error ? error.message : "Unknown error";
+          if (document?.id) {
+            if (!useRestApi) {
+              await db.$executeRaw`
+                UPDATE documents 
+                SET "ingestionStatus" = 'failed', "errorMessage" = ${errorMessage}, "updatedAt" = NOW()
+                WHERE id = ${document.id}
+              `;
+            } else {
+              await supabaseRestClient
+                .from('documents')
+                .update({ 
+                  ingestionStatus: 'failed', 
+                  errorMessage: errorMessage 
+                })
+                .eq('id', document.id);
+            }
+          }
+        } catch (updateError) {
+          console.error("Failed to update document status:", updateError);
         }
-      } catch (updateError) {
-        console.error("Failed to update document status:", updateError);
-      }
 
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       console.error("Returning error response:", errorMessage);

@@ -4,7 +4,11 @@ import { db } from "~/lib/db";
 import { getSiteByUserId } from "~/lib/supabaseRestClient";
 import UploadContent from "~/components/upload/UploadContent";
 
-export default async function UploadPage() {
+interface UploadPageProps {
+  searchParams: { botId?: string };
+}
+
+export default async function UploadPage({ searchParams }: UploadPageProps) {
   const session = await getServerAuthSession();
 
   if (!session?.user) {
@@ -99,8 +103,17 @@ export default async function UploadPage() {
     redirect("/dashboard");
   }
 
-  // Use the first bot by default for backward compatibility
-  const defaultBotId = botsData[0].id;
+  // Use botId from query params if provided, otherwise use the first bot
+  let defaultBotId = botsData[0].id;
+  if (searchParams.botId) {
+    // Validate that the botId exists and belongs to the user
+    const requestedBot = botsData.find(bot => bot.id === searchParams.botId);
+    if (requestedBot) {
+      defaultBotId = searchParams.botId;
+    } else {
+      console.warn(`Bot ID ${searchParams.botId} not found or doesn't belong to user, using default bot`);
+    }
+  }
   
   // Fetch documents for the default bot - use raw SQL to handle both old and new schema
   let documents: any[] = [];
@@ -109,8 +122,8 @@ export default async function UploadPage() {
     const newDocs = await db.$queryRaw<any[]>`
       SELECT 
         id,
-        COALESCE("fileName", filename) as filename,
-        COALESCE("ingestionStatus", status) as status,
+        "fileName" as filename,
+        "ingestionStatus" as status,
         "errorMessage",
         "createdAt"
       FROM documents
@@ -119,23 +132,24 @@ export default async function UploadPage() {
     `;
     documents = newDocs;
   } catch (error: any) {
-    // Fallback to old schema (siteId, filename, status)
+    console.warn("New schema query failed, trying fallback:", error.message);
+    // Fallback: try with COALESCE for backward compatibility
     try {
-      const siteId = botsData[0].siteId;
-      const oldDocs = await db.$queryRaw<any[]>`
+      const fallbackDocs = await db.$queryRaw<any[]>`
         SELECT 
           id,
-          filename,
-          status,
+          COALESCE("fileName", filename) as filename,
+          COALESCE("ingestionStatus", status) as status,
           "errorMessage",
           "createdAt"
         FROM documents
-        WHERE "siteId" = ${siteId}
+        WHERE "botId" = ${defaultBotId} OR "siteId" = (SELECT "siteId" FROM bots WHERE id = ${defaultBotId} LIMIT 1)
         ORDER BY "createdAt" DESC
       `;
-      documents = oldDocs;
-    } catch (fallbackError) {
+      documents = fallbackDocs;
+    } catch (fallbackError: any) {
       console.error("Error fetching documents:", fallbackError);
+      // Last resort: return empty array
       documents = [];
     }
   }
