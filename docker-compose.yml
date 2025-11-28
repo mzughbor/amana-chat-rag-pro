@@ -4,10 +4,11 @@ services:
   app:
     build: .
     ports:
-      - "3000:3000"
+      - "${PORT:-3000}:${PORT:-3000}"
     environment:
       - NODE_ENV=production
-      - NEXTAUTH_URL=http://localhost:3000
+      - PORT=${PORT:-3000}
+      - NEXTAUTH_URL=https://amana-chat.onrender.com
       - DATABASE_URL=postgresql://postgres:password@localhost:5432/amana_rag
       - DIRECT_URL=postgresql://postgres:password@localhost:5432/amana_rag
       - NEXT_PUBLIC_SUPABASE_URL=https://your-supabase-url.supabase.co
