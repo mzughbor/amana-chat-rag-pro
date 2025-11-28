@@ -3,6 +3,14 @@ import { NextResponse } from "next/server";
 
 export default withAuth(
   function middleware(req) {
+    // Custom logic to exclude widget chat from auth protection
+    const { pathname } = req.nextUrl;
+    
+    // If this is a widget chat route, allow it without auth
+    if (pathname.startsWith('/widget/chat/')) {
+      return NextResponse.next();
+    }
+    
     return NextResponse.next();
   },
   {
@@ -20,7 +28,5 @@ export const config = {
     "/logs/:path*",
     // Protect widget setup but not widget chat
     "/widget/:path*",
-    // Exception: don't protect the widget chat pages as they're embedded in iframes
-    "!/widget/chat/:path*"
   ],
 };
