@@ -89,6 +89,39 @@ export default function DashboardPage() {
     }
   };
 
+  const handleDeleteBot = async () => {
+    if (!botToDelete) return;
+    
+    setDeleting(true);
+    try {
+      const response = await fetch(`/api/bots/${botToDelete.id}`, {
+        method: "DELETE",
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to delete bot: ${response.status} ${response.statusText}`);
+      }
+      
+      // Remove bot from list
+      setBots(bots.filter(bot => bot.id !== botToDelete.id));
+      setBotToDelete(null);
+      setShowDeleteConfirm(false);
+      
+      // Show success toast
+      setToastMessage("Bot deleted successfully");
+      setToastType("success");
+      setToastVisible(true);
+    } catch (error) {
+      console.error("Error deleting bot:", error);
+      setToastMessage("Failed to delete bot. Please try again.");
+      setToastType("error");
+      setToastVisible(true);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const handleDeleteClick = (bot: Bot) => {
     setBotToDelete(bot);
     setShowDeleteConfirm(true);
@@ -115,7 +148,7 @@ export default function DashboardPage() {
       setBots(bots.filter((b) => b.id !== botToDelete.id));
       setShowDeleteConfirm(false);
       setBotToDelete(null);
-      setToastMessage(`Bot "${botToDelete.name}" deleted successfully`);
+      setToastMessage(`Bot &quot;${botToDelete.name}&quot; deleted successfully`);
       setToastType("success");
       setToastVisible(true);
       console.log(`✅ Bot "${botToDelete.name}" deleted successfully`);
@@ -377,20 +410,9 @@ export default function DashboardPage() {
             </div>
             <div className="flex-1">
               <h3 className="text-lg font-semibold text-slate-900 mb-2">
-                Are you sure you want to delete "{botToDelete?.name}"?
+                Are you sure you want to delete &quot;{botToDelete?.name}&quot;? This action cannot be undone and will permanently delete the bot and all associated data.
+
               </h3>
-              <p className="text-sm text-slate-600 mb-4">
-                This will permanently delete:
-              </p>
-              <ul className="text-sm text-slate-600 space-y-1 mb-4 list-disc list-inside">
-                <li>The bot</li>
-                <li>All documents</li>
-                <li>All conversations</li>
-                <li>All Q&A pairs</li>
-              </ul>
-              <p className="text-sm font-medium text-red-600">
-                This action cannot be undone.
-              </p>
             </div>
           </div>
           <div className="flex gap-3 justify-end pt-4 border-t border-gray-200">

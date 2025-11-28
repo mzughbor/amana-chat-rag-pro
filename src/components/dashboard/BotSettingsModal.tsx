@@ -36,13 +36,6 @@ export default function BotSettingsModal({
   const [toastMessage, setToastMessage] = useState("");
   const [toastType, setToastType] = useState<"success" | "error" | "info">("info");
 
-  // Load existing widget settings when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      loadWidgetSettings();
-    }
-  }, [isOpen, bot.id]);
-
   const loadWidgetSettings = async () => {
     setLoadingSettings(true);
     setError("");
@@ -79,6 +72,13 @@ export default function BotSettingsModal({
       setLoadingSettings(false);
     }
   };
+
+  // Load existing widget settings when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      loadWidgetSettings();
+    }
+  }, [isOpen, bot.id, loadWidgetSettings]);
 
   const saveBotSettings = async () => {
     setSaving(true);
