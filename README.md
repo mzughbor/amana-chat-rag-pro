@@ -291,6 +291,22 @@ For deployment, you'll need to set the following environment variables:
 
 The `render.yaml` file in this repository provides a basic configuration for Render deployment.
 
+#### Render Environment Variables
+
+When deploying to Render, you MUST use the Render Postgres connection string with `?sslmode=require`:
+
+```
+DATABASE_URL=postgresql://postgres_user:postgres_pass@dpg-xxxxx.render.com:5432/amana_rag?sslmode=require
+DIRECT_URL=postgresql://postgres_user:postgres_pass@dpg-xxxxx.render.com:5432/amana_rag?sslmode=require
+```
+
+Replace `postgres_user`, `postgres_pass`, and `dpg-xxxxx.render.com` with your actual Render Postgres credentials.
+
+**Important Notes:**
+- NEVER use `localhost` URLs on Render
+- ALWAYS include `?sslmode=require` for Render Postgres connections
+- The Render Postgres connection string can be found in your Render dashboard under your Postgres instance
+
 ## 🎯 Key Features Implemented
 
 ### 1. Create Bot Wizard
