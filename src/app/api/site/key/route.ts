@@ -49,19 +49,37 @@ export async function POST(request: NextRequest) {
       where: { userId: session.user.id },
     });
 
-    if (site) {
-      // Update existing site
-      site = await db.site.update({
-        where: { id: site.id },
-        data: { apiKeyEncrypted: encryptedKey },
-      });
-    } else {
-      // Create new site
+    if (!site) {
+      // Create new site if it doesn't exist
       site = await db.site.create({
         data: {
           userId: session.user.id,
           name: "My Site",
-          apiKeyEncrypted: encryptedKey,
+        },
+      });
+    }
+
+    // Create or update API key record
+    let apiKeyRecord = await db.apiKey.findFirst({
+      where: { 
+        userId: session.user.id,
+        provider: "openai"
+      },
+    });
+
+    if (apiKeyRecord) {
+      // Update existing API key
+      apiKeyRecord = await db.apiKey.update({
+        where: { id: apiKeyRecord.id },
+        data: { encryptedKey: encryptedKey },
+      });
+    } else {
+      // Create new API key record
+      apiKeyRecord = await db.apiKey.create({
+        data: {
+          userId: session.user.id,
+          provider: "openai",
+          encryptedKey: encryptedKey,
         },
       });
     }
@@ -81,4 +99,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

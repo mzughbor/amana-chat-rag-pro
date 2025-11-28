@@ -18,12 +18,13 @@ export async function GET(
     if (!bot) {
       const site = await db.site.findUnique({
         where: { id: siteId },
-        include: { bot: true },
+        include: { bots: true },
       });
-      if (site?.bot) {
+      // Get the first bot from the site
+      if (site?.bots && site.bots.length > 0) {
         bot = {
-          widgetSettings: site.bot.widgetSettings,
-          scriptEmbedId: site.bot.scriptEmbedId,
+          widgetSettings: site.bots[0].widgetSettings,
+          scriptEmbedId: site.bots[0].scriptEmbedId,
         };
       }
     }

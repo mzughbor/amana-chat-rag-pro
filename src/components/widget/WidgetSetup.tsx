@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useSession } from "next-auth/react";
 import Link from "next/link";
 import Card from "~/components/ui/Card";
 import Button from "~/components/ui/Button";
@@ -65,7 +66,7 @@ export default function WidgetSetup() {
     }
   }, [selectedBotId]);
 
-  const fetchBots = async () => {
+  const fetchBots = useCallback(async () => {
     try {
       setLoading(true);
       const response = await fetch("/api/bots", {
@@ -94,7 +95,7 @@ export default function WidgetSetup() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedBotId]);
 
   // Fetch bots on mount
   useEffect(() => {

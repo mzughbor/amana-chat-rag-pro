@@ -251,7 +251,7 @@ export default function CreateBotWizard({
               placeholder="example.com"
               value={siteName}
               onChange={(e) => setSiteName(e.target.value)}
-              helpText="Enter your website domain (e.g., example.com)"
+              helperText="Enter your website domain (e.g., example.com)"
             />
             <div>
               <label className="block text-sm font-medium text-gray-900 mb-2">

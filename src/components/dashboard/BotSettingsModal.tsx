@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Modal from "~/components/ui/Modal";
 import Button from "~/components/ui/Button";
 import Toast from "~/components/ui/Toast";
@@ -36,7 +36,7 @@ export default function BotSettingsModal({
   const [toastMessage, setToastMessage] = useState("");
   const [toastType, setToastType] = useState<"success" | "error" | "info">("info");
 
-  const loadWidgetSettings = async () => {
+  const loadWidgetSettings = useCallback(async () => {
     setLoadingSettings(true);
     setError("");
     try {
@@ -71,14 +71,14 @@ export default function BotSettingsModal({
     } finally {
       setLoadingSettings(false);
     }
-  };
+  }, [bot.id, bot.welcomeMessage]);
 
   // Load existing widget settings when modal opens
   useEffect(() => {
     if (isOpen) {
       loadWidgetSettings();
     }
-  }, [isOpen, bot.id, loadWidgetSettings]);
+  }, [isOpen, loadWidgetSettings]);
 
   const saveBotSettings = async () => {
     setSaving(true);

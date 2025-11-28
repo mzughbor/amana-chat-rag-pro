@@ -20,7 +20,7 @@
 
   // Parse color (add # if not present)
   const primaryColor = colorParam.startsWith('#') ? colorParam : `#${colorParam}`;
-  
+
   // Parse border radius
   const borderRadius = radiusParam;
 

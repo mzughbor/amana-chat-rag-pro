@@ -24,7 +24,7 @@ export async function GET() {
           id: true,
           name: true,
           createdAt: true,
-          widgetSettings: true,
+          // Removed widgetSettings since it doesn't exist on Site model
         },
         orderBy: {
           createdAt: "desc",
@@ -82,7 +82,7 @@ export async function POST(request: Request) {
         data: {
           name,
           userId: session.user.id,
-          widgetSettings: {}, // Default empty settings
+          // Removed widgetSettings since it doesn't exist on Site model
         },
       });
 
