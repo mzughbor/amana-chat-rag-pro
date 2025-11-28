@@ -307,7 +307,8 @@ export async function GET(
   { params }: { params: { siteId: string } },
 ) {
   try {
-    const { siteId } = params;
+    // Handle both siteId and botId in the same parameter
+    const { siteId: contextId } = params;
     const url = new URL(request.url);
     const visitorId = url.searchParams.get("visitorId");
     const providedConversationId = url.searchParams.get("conversationId");
@@ -319,13 +320,13 @@ export async function GET(
       );
     }
 
-    const { bot, site, useRestApi } = await getBotOrSite(siteId);
+    const { bot, site, useRestApi } = await getBotOrSite(contextId);
 
     if (!bot && !site) {
       return NextResponse.json({ error: "Bot or site not found" }, { status: 404 });
     }
 
-    const contextId = bot ? bot.id : siteId;
+    const actualContextId = bot ? bot.id : contextId;
     let conversation: ConversationRecord | null = null;
 
     if (providedConversationId) {
@@ -333,7 +334,7 @@ export async function GET(
     }
 
     if (!conversation && visitorId) {
-      conversation = await findConversationForVisitor(contextId, visitorId, useRestApi);
+      conversation = await findConversationForVisitor(actualContextId, visitorId, useRestApi);
     }
 
     if (!conversation) {
@@ -366,7 +367,8 @@ export async function POST(
   { params }: { params: { siteId: string } },
 ) {
   try {
-    const { siteId } = params;
+    // Handle both siteId and botId in the same parameter
+    const { siteId: contextId } = params;
     const body = await request.json();
     const { message, visitorId, conversationId: providedConversationId } = body;
 
@@ -377,7 +379,7 @@ export async function POST(
       );
     }
 
-    const { bot, site, useRestApi } = await getBotOrSite(siteId);
+    const { bot, site, useRestApi } = await getBotOrSite(contextId);
 
     if (!bot && !site) {
       return NextResponse.json({ error: "Bot or site not found" }, { status: 404 });
@@ -407,7 +409,7 @@ export async function POST(
     }
 
     const apiKey = decryptApiKey(apiKeyEncrypted, encryptionKey);
-    const contextId = bot ? bot.id : siteId;
+    const actualContextId = bot ? bot.id : contextId;
     const visitorIdFinal = visitorId ?? crypto.randomUUID();
 
     let conversation: ConversationRecord | null = null;
@@ -415,7 +417,7 @@ export async function POST(
       conversation = await getConversationById(providedConversationId, useRestApi);
     }
     if (!conversation) {
-      conversation = await findConversationForVisitor(contextId, visitorIdFinal, useRestApi);
+      conversation = await findConversationForVisitor(actualContextId, visitorIdFinal, useRestApi);
     }
     if (!conversation) {
       conversation = await createConversation(
@@ -432,7 +434,7 @@ export async function POST(
       useRestApi,
     );
 
-    const relevantChunks = await retrieveContext(message, contextId, apiKey, 5);
+    const relevantChunks = await retrieveContext(message, actualContextId, apiKey, 5);
     const context = buildContext(relevantChunks);
 
     const systemPrompt = `You are a helpful AI assistant for a business. Answer questions based on the provided context. If the answer is not in the context, say so politely.

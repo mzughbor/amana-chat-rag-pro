@@ -19,6 +19,8 @@ export const config = {
     "/api-key/:path*", 
     "/logs/:path*",
     // Protect widget setup but not widget chat
-    "/widget/:path*"
+    "/widget/:path*",
+    // Exception: don't protect the widget chat pages as they're embedded in iframes
+    "!/widget/chat/:path*"
   ],
 };

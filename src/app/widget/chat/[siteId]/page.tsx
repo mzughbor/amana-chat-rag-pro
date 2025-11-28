@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import Script from 'next/script';
 
 export default function WidgetChatPage({ params }: { params: { siteId: string } }) {
-  // Validate siteId
+  // Validate contextId (can be either siteId or botId)
   if (!params.siteId) {
     notFound();
   }

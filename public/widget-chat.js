@@ -27,11 +27,11 @@
     const container = document.getElementById('amana-rag-widget-container');
     if (!container) return;
 
-    const siteId = container.getAttribute('data-site-id');
+    const contextId = container.getAttribute('data-site-id');
     // In the future, we might also support data-bot-id
 
-    if (!siteId) {
-      console.error('AmanaRAG: siteId is required');
+    if (!contextId) {
+      console.error('AmanaRAG: contextId is required');
       return;
     }
 
@@ -44,7 +44,7 @@
     const primaryColor = colorParam.startsWith('#') ? colorParam : `#${colorParam}`;
 
     // Fetch bot info and then initialize the widget
-    fetchBotInfo(siteId).then(botInfo => {
+    fetchBotInfo(contextId).then(botInfo => {
       const botName = botInfo?.name || 'Chat Assistant';
 
       // Replace the placeholder with the actual chat interface
@@ -135,7 +135,7 @@
       }
 
       // Initialize chat functionality
-      initChatFunctionality(siteId, primaryColor);
+      initChatFunctionality(contextId, primaryColor);
     });
   }
 
