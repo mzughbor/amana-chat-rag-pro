@@ -1,0 +1,26 @@
+node_modules
+.next
+.git
+.gitignore
+README.md
+.env.local
+.env.development
+.env.test
+.env.*.local
+*.log
+*.lock
+Dockerfile
+.dockerignore
+README.md
+docs
+test
+test-chat-site
+*.md
+*.ps1
+*.js (test files)
+check-*.js
+create-test-bot.js
+fix-database-connection.js
+run-migration.ps1
+IMPLEMENTATION_STATUS.md
+proposed-schema.sql

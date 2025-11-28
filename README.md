@@ -235,6 +235,62 @@ Open [http://localhost:3800](http://localhost:3800) in your browser and click th
 - Programmatic navigation uses `useRouter` from `next/navigation`
 - Protected routes automatically redirect to `/login` if unauthenticated
 
+## 🚀 Deployment
+
+### Docker Deployment
+
+This application can be deployed using Docker for easy containerization and deployment.
+
+#### Building and Running with Docker
+
+1. Build the Docker image:
+```bash
+npm run docker:build
+```
+
+2. Run the Docker container:
+```bash
+npm run docker:run
+```
+
+3. Access the application at `http://localhost:3000`
+
+#### Development with Docker Compose
+
+For local development with a PostgreSQL database:
+
+```bash
+npm run docker:dev
+```
+
+This will start both the application and a PostgreSQL database container.
+
+### Environment Variables
+
+For deployment, you'll need to set the following environment variables:
+
+- `DATABASE_URL` - Connection string for your PostgreSQL database
+- `DIRECT_URL` - Direct connection string for database migrations
+- `NEXTAUTH_URL` - The URL of your deployed application (e.g., https://your-app.onrender.com)
+- `NEXTAUTH_SECRET` - A random string used to hash tokens, sign/encrypt cookies and generate cryptographic keys
+- `ENCRYPTION_KEY` - A 32+ character random string for encrypting API keys
+- `NEXT_PUBLIC_SUPABASE_URL` - Your Supabase project URL
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Your Supabase anonymous key
+- `SUPABASE_SERVICE_ROLE_KEY` - Your Supabase service role key
+- `OPENAI_API_KEY` - Your OpenAI API key (optional)
+
+### Deploying to Render
+
+1. Fork this repository to your GitHub account
+2. Create a new Web Service on Render
+3. Connect your forked repository
+4. Set the build command to `npm install && npm run build`
+5. Set the start command to `npm start`
+6. Add the required environment variables in the Render dashboard
+7. Deploy!
+
+The `render.yaml` file in this repository provides a basic configuration for Render deployment.
+
 ## 🎯 Key Features Implemented
 
 ### 1. Create Bot Wizard

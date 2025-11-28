@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXTAUTH_URL=http://localhost:3000
+      - DATABASE_URL=postgresql://postgres:password@localhost:5432/amana_rag
+      - DIRECT_URL=postgresql://postgres:password@localhost:5432/amana_rag
+      - NEXT_PUBLIC_SUPABASE_URL=https://your-supabase-url.supabase.co
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+      - SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+      - NEXTAUTH_SECRET=your-nextauth-secret
+      - ENCRYPTION_KEY=your-encryption-key
+      - OPENAI_API_KEY=your-openai-api-key
+    depends_on:
+      - db
+
+  db:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=amana_rag
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
