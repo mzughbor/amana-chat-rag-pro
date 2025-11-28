@@ -8,12 +8,12 @@ const inter = Inter({
 });
 
 export const metadata = {
-  title: "AmanaRAG Chat Widget",
+  title: "Chat Widget",
   description: "Embedded chat widget",
   icons: [{ rel: "icon", url: "/favicon.ico" }],
 };
 
-export default function WidgetLayout({
+export default function WidgetChatLayout({
   children,
 }: {
   children: React.ReactNode;
