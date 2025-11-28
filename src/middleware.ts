@@ -11,7 +11,8 @@ export default withAuth(
       return NextResponse.next();
     }
     
-    return NextResponse.next();
+    // For all other protected routes, require authentication
+    return undefined; // This will trigger the authorized callback
   },
   {
     callbacks: {
