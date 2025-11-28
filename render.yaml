@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: amana-rag
+    name: amana-chat-rag-pro
     env: docker
     plan: free
     autoDeploy: false
@@ -9,7 +9,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: NEXTAUTH_URL
-        value: https://amana-chat.onrender.com
+        sync: false
       - key: DATABASE_URL
         sync: false
       - key: DIRECT_URL

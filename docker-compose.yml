@@ -8,7 +8,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=${PORT:-3000}
-      - NEXTAUTH_URL=https://amana-chat.onrender.com
+      - NEXTAUTH_URL=https://amana-chat-rag-pro.onrender.com
       - DATABASE_URL=postgresql://postgres:password@localhost:5432/amana_rag
       - DIRECT_URL=postgresql://postgres:password@localhost:5432/amana_rag
       - NEXT_PUBLIC_SUPABASE_URL=https://your-supabase-url.supabase.co
