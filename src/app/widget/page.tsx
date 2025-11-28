@@ -9,6 +9,8 @@ export default async function WidgetPage() {
     redirect("/login");
   }
 
+  console.log("User authenticated, proceeding to widget setup for user:", session.user.id);
+
   // WidgetSetup component will handle fetching bots and selection
   return <WidgetSetup />;
 }

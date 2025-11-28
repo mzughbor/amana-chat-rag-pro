@@ -30,6 +30,8 @@ export default async function UploadPage({ searchParams }: UploadPageProps) {
       ORDER BY s."createdAt" DESC
     `;
     
+    console.log("Database query result:", sites.length, "sites/bots found");
+    
     // Group by site
     const sitesMap: Record<string, any> = {};
     sites.forEach(site => {
@@ -72,6 +74,8 @@ export default async function UploadPage({ searchParams }: UploadPageProps) {
       // Let's try to get sites with bots using the existing function and adapt
       const site = await getSiteByUserId(session.user.id);
       
+      console.log("REST API result:", site ? "site found" : "no site found");
+      
       if (site) {
         sitesData = [{
           id: site.id,
@@ -98,6 +102,7 @@ export default async function UploadPage({ searchParams }: UploadPageProps) {
   }
 
   // If no bots exist, redirect to dashboard to create one
+  console.log("Final bots data count:", botsData.length);
   if (botsData.length === 0) {
     console.log("No bots found, redirecting to dashboard");
     redirect("/dashboard");
