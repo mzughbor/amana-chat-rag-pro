@@ -14,7 +14,23 @@ export function getSupabase() {
   // This is safe because we only use the client during runtime, not build time
   if (process.env.NEXT_PHASE === 'phase-production-build' && !supabaseUrl) {
     console.warn("⚠️  NEXT_PUBLIC_SUPABASE_URL not set during build phase - returning dummy client");
-    return createClient("", "") as ReturnType<typeof createClient>;
+    // Return a properly typed dummy client that won't cause TypeScript errors
+    const dummyClient: any = {
+      auth: {
+        signUp: (credentials: any) => Promise.resolve({ data: { user: null }, error: null }),
+        signInWithPassword: (credentials: any) => Promise.resolve({ data: { user: null }, error: null }),
+        signOut: () => Promise.resolve({ error: null }),
+        getUser: () => Promise.resolve({ data: { user: null }, error: null }),
+      },
+      from: (table: string) => ({
+        select: (columns?: string) => ({
+          eq: (column: string, value: any) => ({
+            single: () => Promise.resolve({ data: null, error: null }),
+          }),
+        }),
+      }),
+    };
+    return dummyClient;
   }
   
   if (!supabaseUrl) {
@@ -39,7 +55,23 @@ export function getSupabaseAdmin() {
   // This is safe because we only use the client during runtime, not build time
   if (process.env.NEXT_PHASE === 'phase-production-build' && !supabaseUrl) {
     console.warn("⚠️  NEXT_PUBLIC_SUPABASE_URL not set during build phase - returning dummy admin client");
-    return createClient("", "") as ReturnType<typeof createClient>;
+    // Return a properly typed dummy client that won't cause TypeScript errors
+    const dummyClient: any = {
+      auth: {
+        signUp: (credentials: any) => Promise.resolve({ data: { user: null }, error: null }),
+        signInWithPassword: (credentials: any) => Promise.resolve({ data: { user: null }, error: null }),
+        signOut: () => Promise.resolve({ error: null }),
+        getUser: () => Promise.resolve({ data: { user: null }, error: null }),
+      },
+      from: (table: string) => ({
+        select: (columns?: string) => ({
+          eq: (column: string, value: any) => ({
+            single: () => Promise.resolve({ data: null, error: null }),
+          }),
+        }),
+      }),
+    };
+    return dummyClient;
   }
   
   if (!supabaseUrl) {

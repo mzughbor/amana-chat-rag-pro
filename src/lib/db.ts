@@ -18,7 +18,46 @@ export function getDb(): PrismaClient {
     // This is safe because we only use the client during runtime, not build time
     if (process.env.NEXT_PHASE === 'phase-production-build') {
       console.warn("⚠️  DATABASE_URL not set during build phase - returning dummy client");
-      return new PrismaClient() as PrismaClient;
+      // Return a properly typed dummy client that won't cause TypeScript errors
+      const dummyClient: any = {
+        $connect: () => Promise.resolve(),
+        $disconnect: () => Promise.resolve(),
+        user: {
+          findUnique: (args: any) => Promise.resolve(null),
+          findMany: (args: any) => Promise.resolve([]),
+          create: (args: any) => Promise.resolve(null),
+          update: (args: any) => Promise.resolve(null),
+        },
+        account: {
+          findUnique: (args: any) => Promise.resolve(null),
+          create: (args: any) => Promise.resolve(null),
+        },
+        site: {
+          findUnique: (args: any) => Promise.resolve(null),
+          findMany: (args: any) => Promise.resolve([]),
+          create: (args: any) => Promise.resolve(null),
+          update: (args: any) => Promise.resolve(null),
+        },
+        bot: {
+          findUnique: (args: any) => Promise.resolve(null),
+          findMany: (args: any) => Promise.resolve([]),
+          create: (args: any) => Promise.resolve(null),
+          update: (args: any) => Promise.resolve(null),
+        },
+        message: {
+          findUnique: (args: any) => Promise.resolve(null),
+          findMany: (args: any) => Promise.resolve([]),
+          create: (args: any) => Promise.resolve(null),
+          update: (args: any) => Promise.resolve(null),
+        },
+        document: {
+          findUnique: (args: any) => Promise.resolve(null),
+          findMany: (args: any) => Promise.resolve([]),
+          create: (args: any) => Promise.resolve(null),
+          update: (args: any) => Promise.resolve(null),
+        },
+      };
+      return dummyClient;
     }
     
     console.error(

@@ -10,13 +10,13 @@ const nextConfig = {
         fs: false,
       };
     }
-    
+
     // Add support for TypeScript path aliases
     config.resolve.alias = {
       ...config.resolve.alias,
       '~': require('path').resolve(__dirname, 'src'),
     };
-    
+
     return config;
   },
 };
