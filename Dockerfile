@@ -10,8 +10,8 @@ COPY prisma ./prisma/
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install all dependencies (including dev dependencies needed for build)
+RUN npm ci
 
 # Generate Prisma client
 RUN npx prisma generate
@@ -21,6 +21,9 @@ COPY . .
 
 # Build the Next.js application
 RUN npm run build
+
+# Remove dev dependencies to reduce image size
+RUN npm prune --production
 
 # Expose port from environment variable or default to 3000
 EXPOSE ${PORT:-3000}
