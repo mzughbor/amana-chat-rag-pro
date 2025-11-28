@@ -136,7 +136,7 @@ export async function updateWidgetSettings(siteId: string, widgetSettings: any) 
   try {
     const { data, error } = await getSupabaseRestClient()
       .from('sites')
-      .update({ widgetSettings: widgetSettings } as any)
+      .update({ widgetSettings } as any)
       .eq('id', siteId)
       .select()
       .single();

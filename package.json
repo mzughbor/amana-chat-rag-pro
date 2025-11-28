@@ -10,7 +10,7 @@
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
     "db:generate": "prisma generate",
-    "postinstall": "prisma generate",
+    "postinstall": "echo 'Skipping prisma generate in postinstall'",
     "docker:build": "docker build -t amana-rag .",
     "docker:run": "docker run -e PORT=${PORT:-3000} -p ${PORT:-3000}:${PORT:-3000} amana-rag",
     "docker:dev": "docker-compose up --build"
