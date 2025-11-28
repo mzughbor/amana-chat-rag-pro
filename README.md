@@ -293,19 +293,24 @@ The `render.yaml` file in this repository provides a basic configuration for Ren
 
 #### Render Environment Variables
 
-When deploying to Render, you MUST use the Render Postgres connection string with `?sslmode=require`:
+When deploying to Render with Supabase, you MUST use your Supabase database connection string:
 
 ```
-DATABASE_URL=postgresql://postgres_user:postgres_pass@dpg-xxxxx.render.com:5432/amana_rag?sslmode=require
-DIRECT_URL=postgresql://postgres_user:postgres_pass@dpg-xxxxx.render.com:5432/amana_rag?sslmode=require
+DATABASE_URL=postgresql://[SUPABASE_USER]:[SUPABASE_PASSWORD]@[SUPABASE_HOST]:5432/postgres
+DIRECT_URL=postgresql://[SUPABASE_USER]:[SUPABASE_PASSWORD]@[SUPABASE_HOST]:5432/postgres
+NEXT_PUBLIC_SUPABASE_URL=https://[YOUR_PROJECT_ID].supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=[YOUR_ANON_KEY]
+SUPABASE_SERVICE_ROLE_KEY=[YOUR_SERVICE_ROLE_KEY]
 ```
 
-Replace `postgres_user`, `postgres_pass`, and `dpg-xxxxx.render.com` with your actual Render Postgres credentials.
+Replace the placeholders with your actual Supabase credentials from the Supabase Dashboard:
+- **Settings → Database** for connection string and password
+- **Settings → API** for project URL and keys
 
 **Important Notes:**
 - NEVER use `localhost` URLs on Render
-- ALWAYS include `?sslmode=require` for Render Postgres connections
-- The Render Postgres connection string can be found in your Render dashboard under your Postgres instance
+- ALWAYS include `?sslmode=require` if required by your Supabase setup
+- Ensure your Supabase project allows connections from Render's IP addresses
 
 ## 🎯 Key Features Implemented
 
