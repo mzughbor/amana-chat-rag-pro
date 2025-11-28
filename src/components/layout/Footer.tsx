@@ -38,22 +38,25 @@ export default function Footer() {
           <div>
             <h3 className="text-sm font-semibold text-slate-900 mb-4">Resources</h3>
             <ul className="space-y-2">
-              <li>
-                <Link
-                  href="/privacy"
-                  className="text-sm text-slate-600 hover:text-purple-600 transition-colors duration-300"
-                >
-                  Privacy
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/terms"
-                  className="text-sm text-slate-600 hover:text-purple-600 transition-colors duration-300"
-                >
-                  Terms
-                </Link>
-              </li>
+              {/* 
+                Links to privacy and terms pages commented out since they don't exist
+                <li>
+                  <Link
+                    href="/privacy"
+                    className="text-sm text-slate-600 hover:text-purple-600 transition-colors duration-300"
+                  >
+                    Privacy
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/terms"
+                    className="text-sm text-slate-600 hover:text-purple-600 transition-colors duration-300"
+                  >
+                    Terms
+                  </Link>
+                </li>
+              */}
               <li>
                 <Link
                   href="/#docs"
