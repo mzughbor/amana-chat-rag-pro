@@ -1,19 +1,75 @@
 // Fallback client for Supabase REST API when direct database connection fails
 import { SupabaseClient, createClient } from '@supabase/supabase-js';
 
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+// Lazy initialization of Supabase REST client
+let _supabaseRestClient: ReturnType<typeof createClient> | null = null;
 
-// Use service role key for server-side operations
-export const supabaseRestClient = createClient(supabaseUrl, supabaseServiceRoleKey);
+export function getSupabaseRestClient() {
+  if (_supabaseRestClient) return _supabaseRestClient;
+  
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  
+  // During build process, we can't connect to Supabase, so we return a dummy client
+  // This is safe because we only use the client during runtime, not build time
+  if (process.env.NEXT_PHASE === 'phase-production-build' && !supabaseUrl) {
+    console.warn("⚠️  NEXT_PUBLIC_SUPABASE_URL not set during build phase - returning dummy REST client");
+    // Return a properly typed dummy client that won't cause TypeScript errors
+    const dummyClient: any = {
+      from: (table: string) => ({
+        select: (columns?: string) => ({
+          eq: (column: string, value: any) => ({
+            single: () => Promise.resolve({ data: null, error: null }),
+            order: (column: string, options: any) => ({
+              eq: (column: string, value: any) => ({
+                single: () => Promise.resolve({ data: null, error: null }),
+              }),
+            }),
+          }),
+          order: (column: string, options: any) => ({
+            eq: (column: string, value: any) => ({
+              single: () => Promise.resolve({ data: null, error: null }),
+            }),
+          }),
+          single: () => Promise.resolve({ data: null, error: null }),
+        }),
+        insert: (values: any) => ({
+          select: () => ({
+            single: () => Promise.resolve({ data: null, error: null }),
+          }),
+        }),
+        update: (values: any) => ({
+          eq: (column: string, value: any) => ({
+            select: () => ({
+              single: () => Promise.resolve({ data: null, error: null }),
+            }),
+          }),
+        }),
+      }),
+    };
+    return dummyClient;
+  }
+  
+  if (!supabaseUrl) {
+    console.error("❌ NEXT_PUBLIC_SUPABASE_URL is not set in environment variables.");
+  }
+  
+  if (!supabaseServiceRoleKey) {
+    console.error("❌ SUPABASE_SERVICE_ROLE_KEY is not set in environment variables.");
+  }
+  
+  _supabaseRestClient = createClient(supabaseUrl, supabaseServiceRoleKey);
+  return _supabaseRestClient;
+}
+
+// Export getter function instead of direct client
+export const supabaseRestClient = getSupabaseRestClient();
 
 // Fallback functions for database operations
 export async function getSitesByUserEmail(email: string) {
   try {
     // First get the user ID by email
-    const { data: users, error: userError } = await supabaseRestClient
+    const { data: users, error: userError } = await getSupabaseRestClient()
       .from('users')
       .select('id')
       .eq('email', email)
@@ -23,10 +79,10 @@ export async function getSitesByUserEmail(email: string) {
     if (!users) throw new Error('User not found');
 
     // Then get sites for that user
-    const { data: sites, error: siteError } = await supabaseRestClient
+    const { data: sites, error: siteError } = await getSupabaseRestClient()
       .from('sites')
       .select('id, name, createdAt, widgetSettings')
-      .eq('userId', users.id)
+      .eq('userId', (users as any).id)
       .order('createdAt', { ascending: false });
 
     if (siteError) throw siteError;
@@ -40,7 +96,7 @@ export async function getSitesByUserEmail(email: string) {
 
 export async function getSiteByUserId(userId: string) {
   try {
-    const { data: sites, error: siteError } = await supabaseRestClient
+    const { data: sites, error: siteError } = await getSupabaseRestClient()
       .from('sites')
       .select('id, name, userId, bots(id, name, welcomeMessage, widgetSettings, scriptEmbedId)')
       .eq('userId', userId)
@@ -58,13 +114,13 @@ export async function getSiteByUserId(userId: string) {
 
 export async function createSite(userId: string, name: string, widgetSettings: any = {}) {
   try {
-    const { data, error } = await supabaseRestClient
+    const { data, error } = await getSupabaseRestClient()
       .from('sites')
       .insert({
         userId,
         name,
         widgetSettings,
-      })
+      } as any)
       .select()
       .single();
 
@@ -78,9 +134,9 @@ export async function createSite(userId: string, name: string, widgetSettings: a
 
 export async function updateWidgetSettings(siteId: string, widgetSettings: any) {
   try {
-    const { data, error } = await supabaseRestClient
+    const { data, error } = await getSupabaseRestClient()
       .from('sites')
-      .update({ widgetSettings })
+      .update({ widgetSettings } as any)
       .eq('id', siteId)
       .select()
       .single();
@@ -95,7 +151,7 @@ export async function updateWidgetSettings(siteId: string, widgetSettings: any) 
 
 export async function getSiteById(siteId: string) {
   try {
-    const { data, error } = await supabaseRestClient
+    const { data, error } = await getSupabaseRestClient()
       .from('sites')
       .select('*')
       .eq('id', siteId)

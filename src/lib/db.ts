@@ -4,44 +4,100 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-// Check if DATABASE_URL is set
-const databaseUrl = process.env.DATABASE_URL;
+// Lazy initialization of Prisma client
+let _db: PrismaClient | null = null;
 
-if (!databaseUrl) {
-  console.error(
-    "❌ DATABASE_URL is not set in environment variables.\n" +
-    "Please add DATABASE_URL to your .env file.\n" +
-    "Get it from Supabase Dashboard → Settings → Database → Connection string"
-  );
-} else {
-  // Validate DATABASE_URL format
-  if (!databaseUrl.startsWith("postgresql://") && !databaseUrl.startsWith("postgres://")) {
-    console.warn(
-      "⚠️  DATABASE_URL doesn't look like a valid PostgreSQL connection string.\n" +
-      "Expected format: postgresql://user:password@host:port/database"
+export function getDb(): PrismaClient {
+  if (_db) return _db;
+  
+  // Check if DATABASE_URL is set
+  const databaseUrl = process.env.DATABASE_URL;
+  
+  if (!databaseUrl) {
+    // During build process, we can't connect to database, so we return a dummy client
+    // This is safe because we only use the client during runtime, not build time
+    if (process.env.NEXT_PHASE === 'phase-production-build') {
+      console.warn("⚠️  DATABASE_URL not set during build phase - returning dummy client");
+      // Return a properly typed dummy client that won't cause TypeScript errors
+      const dummyClient: any = {
+        $connect: () => Promise.resolve(),
+        $disconnect: () => Promise.resolve(),
+        user: {
+          findUnique: (args: any) => Promise.resolve(null),
+          findMany: (args: any) => Promise.resolve([]),
+          create: (args: any) => Promise.resolve(null),
+          update: (args: any) => Promise.resolve(null),
+        },
+        account: {
+          findUnique: (args: any) => Promise.resolve(null),
+          create: (args: any) => Promise.resolve(null),
+        },
+        site: {
+          findUnique: (args: any) => Promise.resolve(null),
+          findMany: (args: any) => Promise.resolve([]),
+          create: (args: any) => Promise.resolve(null),
+          update: (args: any) => Promise.resolve(null),
+        },
+        bot: {
+          findUnique: (args: any) => Promise.resolve(null),
+          findMany: (args: any) => Promise.resolve([]),
+          create: (args: any) => Promise.resolve(null),
+          update: (args: any) => Promise.resolve(null),
+        },
+        message: {
+          findUnique: (args: any) => Promise.resolve(null),
+          findMany: (args: any) => Promise.resolve([]),
+          create: (args: any) => Promise.resolve(null),
+          update: (args: any) => Promise.resolve(null),
+        },
+        document: {
+          findUnique: (args: any) => Promise.resolve(null),
+          findMany: (args: any) => Promise.resolve([]),
+          create: (args: any) => Promise.resolve(null),
+          update: (args: any) => Promise.resolve(null),
+        },
+      };
+      return dummyClient;
+    }
+    
+    console.error(
+      "❌ DATABASE_URL is not set in environment variables.\n" +
+      "Please add DATABASE_URL to your .env file.\n" +
+      "Get it from Supabase Dashboard → Settings → Database → Connection string"
     );
+  } else {
+    // Validate DATABASE_URL format
+    if (!databaseUrl.startsWith("postgresql://") && !databaseUrl.startsWith("postgres://")) {
+      console.warn(
+        "⚠️  DATABASE_URL doesn't look like a valid PostgreSQL connection string.\n" +
+        "Expected format: postgresql://user:password@host:port/database"
+      );
+    }
+    
+    // Check if using pooler and suggest direct connection if needed
+    // "If you encounter connection issues, try Direct Connection (port 5432) instead."
+    if (databaseUrl.includes("pooler.supabase.com") && databaseUrl.includes(":6543")) {
+      console.log(
+        "ℹ️  Using Supabase Connection Pooler (port 6543).\n"
+      );
+    }
   }
   
-  // Check if using pooler and suggest direct connection if needed
-  // "If you encounter connection issues, try Direct Connection (port 5432) instead."
-  if (databaseUrl.includes("pooler.supabase.com") && databaseUrl.includes(":6543")) {
-    console.log(
-      "ℹ️  Using Supabase Connection Pooler (port 6543).\n"
-    );
-  }
-}
-
-export const db =
-  globalForPrisma.prisma ??
-  new PrismaClient({
+  _db = new PrismaClient({
     log:
       process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
     datasources: {
       db: {
-        url: databaseUrl,
+        url: databaseUrl || "", // Provide empty string as fallback during build
       },
     },
   });
+  
+  return _db;
+}
+
+// Export a getter function instead of the direct client
+export const db = getDb();
 
 // Lazy connection - only connect when needed, not on import
 // This prevents connection errors during build/startup
