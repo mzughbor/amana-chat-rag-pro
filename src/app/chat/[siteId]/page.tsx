@@ -15,6 +15,12 @@ interface ChatMessage {
   createdAt: string;
 }
 
+interface BotInfo {
+  id: string;
+  name: string;
+  welcomeMessage: string;
+}
+
 const quickReplies = [
   "What can you help me with?",
   "Tell me about your services",
@@ -38,8 +44,28 @@ export default function ChatPage() {
   const [error, setError] = useState("");
   const [visitorId, setVisitorId] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [botInfo, setBotInfo] = useState<BotInfo | null>(null); // Add bot info state
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const storageKey = typeof window !== "undefined" ? `chat-visitor-${botId}` : null;
+
+  // Fetch bot info
+  useEffect(() => {
+    const fetchBotInfo = async () => {
+      try {
+        const response = await fetch(`/api/bots/${botId}`);
+        if (response.ok) {
+          const data = await response.json();
+          setBotInfo(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch bot info:", err);
+      }
+    };
+
+    if (botId) {
+      fetchBotInfo();
+    }
+  }, [botId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -198,7 +224,9 @@ export default function ChatPage() {
         <div className="bg-gradient-to-r from-purple-600 to-purple-700 px-6 py-4 border-b border-purple-500/20 flex-shrink-0">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-xl font-bold text-white">Chat Assistant</h1>
+              <h1 className="text-xl font-bold text-white">
+                {botInfo?.name || "Chat Assistant"}
+              </h1>
               <p className="text-xs text-white/80 mt-0.5">Bot ID: {botId}</p>
             </div>
             <Link href="/dashboard">

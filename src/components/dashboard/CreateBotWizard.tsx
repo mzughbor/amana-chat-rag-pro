@@ -28,7 +28,10 @@ export default function CreateBotWizard({
 }: CreateBotWizardProps) {
   const [step, setStep] = useState(1);
   const [botName, setBotName] = useState("");
-  const [welcomeMessage, setWelcomeMessage] = useState("Hello! How can I help you today?");
+  const [siteName, setSiteName] = useState(""); // Add site name state
+  const [welcomeMessage, setWelcomeMessage] = useState(
+    "Hello! How can I help you today?",
+  );
   const [apiKey, setApiKey] = useState("");
   const [error, setError] = useState("");
   const [toastVisible, setToastVisible] = useState(false);
@@ -81,6 +84,10 @@ export default function CreateBotWizard({
         setError("Please fill in the bot name");
         return;
       }
+      if (!siteName.trim()) {
+        setError("Please fill in the site name");
+        return;
+      }
       setError("");
       setStep(2);
     }
@@ -110,7 +117,7 @@ export default function CreateBotWizard({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          siteName: botName, // Site name (can be same as bot name)
+          siteName: siteName, // Use site name
           botName: botName,
           welcomeMessage: welcomeMessage,
         }),
@@ -236,18 +243,30 @@ export default function CreateBotWizard({
               value={botName}
               onChange={(e) => setBotName(e.target.value)}
             />
+            <Input
+              label="Site Name"
+              id="siteName"
+              type="text"
+              required
+              placeholder="example.com"
+              value={siteName}
+              onChange={(e) => setSiteName(e.target.value)}
+              helpText="Enter your website domain (e.g., example.com)"
+            />
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-900 mb-2">
                 Welcome Message
               </label>
               <textarea
-                className="w-full px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-purple-300 focus:border-purple-600"
-                rows={4}
-                required
-                placeholder="Hello! How can I help you today?"
                 value={welcomeMessage}
                 onChange={(e) => setWelcomeMessage(e.target.value)}
+                rows={3}
+                className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-purple-600 focus:outline-none focus:ring-2 focus:ring-purple-200"
+                placeholder="Hello! How can I help you today?"
               />
+              <p className="mt-1 text-xs text-gray-500">
+                This message appears at the top of the chat and test widget preview.
+              </p>
             </div>
           </div>
         )}

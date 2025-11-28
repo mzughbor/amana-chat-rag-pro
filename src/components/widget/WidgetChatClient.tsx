@@ -9,11 +9,37 @@ interface Message {
   timestamp: Date;
 }
 
+interface BotInfo {
+  id: string;
+  name: string;
+  welcomeMessage: string;
+}
+
 export default function WidgetChatClient({ siteId }: { siteId: string }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [botInfo, setBotInfo] = useState<BotInfo | null>(null); // Add bot info state
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Fetch bot info
+  useEffect(() => {
+    const fetchBotInfo = async () => {
+      try {
+        const response = await fetch(`/api/bots/${siteId}`);
+        if (response.ok) {
+          const data = await response.json();
+          setBotInfo(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch bot info:", err);
+      }
+    };
+
+    if (siteId) {
+      fetchBotInfo();
+    }
+  }, [siteId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -83,7 +109,9 @@ export default function WidgetChatClient({ siteId }: { siteId: string }) {
       <div className="bg-gradient-to-r from-purple-600 to-purple-700 px-4 py-3 border-b border-purple-500/20 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-bold text-white">Chat Assistant</h1>
+            <h1 className="text-lg font-bold text-white">
+              {botInfo?.name || "Chat Assistant"}
+            </h1>
           </div>
           {/* Close button for widget */}
           <button 

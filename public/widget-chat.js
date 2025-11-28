@@ -9,6 +9,19 @@
     initWidget();
   }
 
+  async function fetchBotInfo(botId) {
+    try {
+      const response = await fetch(`/api/bots/${botId}`);
+      if (response.ok) {
+        const data = await response.json();
+        return data;
+      }
+    } catch (error) {
+      console.error('Failed to fetch bot info:', error);
+    }
+    return null;
+  }
+
   function initWidget() {
     // Get the container and context ID (either siteId or botId)
     const container = document.getElementById('amana-rag-widget-container');
@@ -16,7 +29,7 @@
 
     const siteId = container.getAttribute('data-site-id');
     // In the future, we might also support data-bot-id
-    
+
     if (!siteId) {
       console.error('AmanaRAG: siteId is required');
       return;
@@ -26,116 +39,121 @@
     const urlParams = new URLSearchParams(window.location.search);
     const colorParam = urlParams.get('color') || '6B46C1'; // Default purple
     const radiusParam = urlParams.get('radius') || '50%'; // Default rounded
-    
+
     // Parse color (add # if not present)
     const primaryColor = colorParam.startsWith('#') ? colorParam : `#${colorParam}`;
-    
-    // Replace the placeholder with the actual chat interface
-    container.innerHTML = `
-      <div class="h-screen flex flex-col bg-white overflow-hidden">
-        <!-- Header - Simplified for widget -->
-        <div class="widget-header px-4 py-3 border-b flex-shrink-0">
-          <div class="flex items-center justify-between">
-            <div>
-              <h1 class="text-lg font-bold text-white">Chat Assistant</h1>
+
+    // Fetch bot info and then initialize the widget
+    fetchBotInfo(siteId).then(botInfo => {
+      const botName = botInfo?.name || 'Chat Assistant';
+
+      // Replace the placeholder with the actual chat interface
+      container.innerHTML = `
+        <div class="h-screen flex flex-col bg-white overflow-hidden">
+          <!-- Header - Simplified for widget -->
+          <div class="widget-header px-4 py-3 border-b flex-shrink-0">
+            <div class="flex items-center justify-between">
+              <div>
+                <h1 class="text-lg font-bold text-white">${botName}</h1>
+              </div>
+              <!-- Close button for widget -->
+              <button id="amana-rag-close-button" class="p-1 rounded-lg hover:bg-white/10 transition-colors" title="Close chat">
+                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
-            <!-- Close button for widget -->
-            <button id="amana-rag-close-button" class="p-1 rounded-lg hover:bg-white/10 transition-colors" title="Close chat">
-              <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
           </div>
-        </div>
 
-        <!-- Messages -->
-        <div id="amana-rag-messages" class="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
-          <div class="text-center text-slate-700 mt-10">
-            <div class="mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-3" style="background-color: ${primaryColor}20;">
-              <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-              </svg>
+          <!-- Messages -->
+          <div id="amana-rag-messages" class="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+            <div class="text-center text-slate-700 mt-10">
+              <div class="mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-3" style="background-color: ${primaryColor}20;">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+              </div>
+              <p class="text-base font-semibold text-slate-900 mb-1">Start a conversation</p>
+              <p class="text-sm text-slate-600">Send a message to get started</p>
             </div>
-            <p class="text-base font-semibold text-slate-900 mb-1">Start a conversation</p>
-            <p class="text-sm text-slate-600">Send a message to get started</p>
           </div>
+
+          <!-- Quick Replies -->
+          <div id="amana-rag-quick-replies" class="px-3 pb-2 border-t border-gray-200 bg-white flex-shrink-0">
+            <div class="flex flex-wrap gap-1.5 pt-2">
+              <button class="amana-rag-quick-reply px-2.5 py-1.5 rounded-full text-xs bg-gray-100 text-slate-700 hover:bg-gray-200 transition-colors border border-gray-200" data-message="What can you help me with?">What can you help me with?</button>
+              <button class="amana-rag-quick-reply px-2.5 py-1.5 rounded-full text-xs bg-gray-100 text-slate-700 hover:bg-gray-200 transition-colors border border-gray-200" data-message="Tell me about your services">Tell me about your services</button>
+              <button class="amana-rag-quick-reply px-2.5 py-1.5 rounded-full text-xs bg-gray-100 text-slate-700 hover:bg-gray-200 transition-colors border border-gray-200" data-message="How do I get started?">How do I get started?</button>
+            </div>
+          </div>
+
+          <!-- Input -->
+          <form id="amana-rag-chat-form" class="border-t border-gray-200 bg-white p-3 flex-shrink-0">
+            <div class="flex gap-2">
+              <input type="text" id="amana-rag-input" placeholder="Type your message..." class="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 disabled:opacity-50 transition-all bg-white" />
+              <button type="submit" id="amana-rag-send-button" class="px-3 py-2 text-sm flex-shrink-0 inline-flex items-center justify-center transition-all duration-300 focus:outline-none focus:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed px-4 py-2 rounded-2xl text-white font-medium shadow">
+                Send
+              </button>
+            </div>
+          </form>
         </div>
+      `;
 
-        <!-- Quick Replies -->
-        <div id="amana-rag-quick-replies" class="px-3 pb-2 border-t border-gray-200 bg-white flex-shrink-0">
-          <div class="flex flex-wrap gap-1.5 pt-2">
-            <button class="amana-rag-quick-reply px-2.5 py-1.5 rounded-full text-xs bg-gray-100 text-slate-700 hover:bg-gray-200 transition-colors border border-gray-200" data-message="What can you help me with?">What can you help me with?</button>
-            <button class="amana-rag-quick-reply px-2.5 py-1.5 rounded-full text-xs bg-gray-100 text-slate-700 hover:bg-gray-200 transition-colors border border-gray-200" data-message="Tell me about your services">Tell me about your services</button>
-            <button class="amana-rag-quick-reply px-2.5 py-1.5 rounded-full text-xs bg-gray-100 text-slate-700 hover:bg-gray-200 transition-colors border border-gray-200" data-message="How do I get started?">How do I get started?</button>
-          </div>
-        </div>
+      // Apply dynamic styles after HTML is inserted
+      const header = container.querySelector('.widget-header');
+      if (header) {
+        header.style.background = `linear-gradient(to right, ${primaryColor}, ${darkenColor(primaryColor, 10)})`;
+        header.style.borderColor = `${primaryColor}80`; // 50% opacity
+      }
 
-        <!-- Input -->
-        <form id="amana-rag-chat-form" class="border-t border-gray-200 bg-white p-3 flex-shrink-0">
-          <div class="flex gap-2">
-            <input type="text" id="amana-rag-input" placeholder="Type your message..." class="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 disabled:opacity-50 transition-all bg-white" />
-            <button type="submit" id="amana-rag-send-button" class="px-3 py-2 text-sm flex-shrink-0 inline-flex items-center justify-center transition-all duration-300 focus:outline-none focus:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed px-4 py-2 rounded-2xl text-white font-medium shadow">
-              Send
-            </button>
-          </div>
-        </form>
-      </div>
-    `;
+      const sendButton = container.querySelector('#amana-rag-send-button');
+      if (sendButton) {
+        sendButton.style.backgroundColor = primaryColor;
 
-    // Apply dynamic styles after HTML is inserted
-    const header = container.querySelector('.widget-header');
-    if (header) {
-      header.style.background = `linear-gradient(to right, ${primaryColor}, ${darkenColor(primaryColor, 10)})`;
-      header.style.borderColor = `${primaryColor}80`; // 50% opacity
-    }
+        // Add hover effect
+        sendButton.addEventListener('mouseenter', function () {
+          this.style.backgroundColor = darkenColor(primaryColor, 10);
+        });
 
-    const sendButton = container.querySelector('#amana-rag-send-button');
-    if (sendButton) {
-      sendButton.style.backgroundColor = primaryColor;
-      
-      // Add hover effect
-      sendButton.addEventListener('mouseenter', function() {
-        this.style.backgroundColor = darkenColor(primaryColor, 10);
-      });
-      
-      sendButton.addEventListener('mouseleave', function() {
-        this.style.backgroundColor = primaryColor;
-      });
-    }
+        sendButton.addEventListener('mouseleave', function () {
+          this.style.backgroundColor = primaryColor;
+        });
+      }
 
-    const inputElement = container.querySelector('#amana-rag-input');
-    if (inputElement) {
-      // Add focus styles dynamically
-      inputElement.addEventListener('focus', function() {
-        this.style.borderColor = primaryColor;
-        this.style.boxShadow = `0 0 0 3px ${primaryColor}33`;
-      });
-      
-      inputElement.addEventListener('blur', function() {
-        this.style.borderColor = '';
-        this.style.boxShadow = '';
-      });
-    }
+      const inputElement = container.querySelector('#amana-rag-input');
+      if (inputElement) {
+        // Add focus styles dynamically
+        inputElement.addEventListener('focus', function () {
+          this.style.borderColor = primaryColor;
+          this.style.boxShadow = `0 0 0 3px ${primaryColor}33`;
+        });
 
-    // Initialize chat functionality
-    initChatFunctionality(siteId, primaryColor);
+        inputElement.addEventListener('blur', function () {
+          this.style.borderColor = '';
+          this.style.boxShadow = '';
+        });
+      }
+
+      // Initialize chat functionality
+      initChatFunctionality(siteId, primaryColor);
+    });
   }
 
   // Helper function to darken a color
   function darkenColor(color, percent) {
     // Remove # if present
     let hex = color.replace('#', '');
-    
+
     // Convert to RGB
     let r = parseInt(hex.substring(0, 2), 16);
     let g = parseInt(hex.substring(2, 4), 16);
     let b = parseInt(hex.substring(4, 6), 16);
-    
+
     // Darken
     r = Math.floor(r * (100 - percent) / 100);
     g = Math.floor(g * (100 - percent) / 100);
     b = Math.floor(b * (100 - percent) / 100);
-    
+
     // Convert back to hex
     return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
   }
@@ -176,11 +194,11 @@
         ? 'text-white'
         : 'bg-white text-slate-900 border border-gray-200 shadow-sm'
         }`;
-      
+
       if (message.role === 'user') {
         contentElement.style.backgroundColor = primaryColor;
       }
-      
+
       contentElement.innerHTML = `<p class="text-sm leading-relaxed whitespace-pre-wrap">${message.content}</p>`;
 
       messageElement.appendChild(contentElement);
