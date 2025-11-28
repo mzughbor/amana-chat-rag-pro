@@ -9,7 +9,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: NEXTAUTH_URL
-        sync: false
+        value: https://amana-chat.onrender.com
       - key: DATABASE_URL
         sync: false
       - key: DIRECT_URL
