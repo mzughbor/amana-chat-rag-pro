@@ -19,6 +19,6 @@ export const config = {
     "/api-key/:path*", 
     "/logs/:path*",
     // Protect widget setup but not widget chat
-    "/widget/setup/:path*"
+    "/widget/:path*"
   ],
 };
