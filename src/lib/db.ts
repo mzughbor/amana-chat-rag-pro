@@ -23,10 +23,10 @@ if (!databaseUrl) {
   }
   
   // Check if using pooler and suggest direct connection if needed
+  // "If you encounter connection issues, try Direct Connection (port 5432) instead."
   if (databaseUrl.includes("pooler.supabase.com") && databaseUrl.includes(":6543")) {
     console.log(
-      "ℹ️  Using Supabase Connection Pooler (port 6543).\n" +
-      "If you encounter connection issues, try Direct Connection (port 5432) instead."
+      "ℹ️  Using Supabase Connection Pooler (port 6543).\n"
     );
   }
 }

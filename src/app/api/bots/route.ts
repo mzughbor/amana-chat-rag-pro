@@ -128,7 +128,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { siteName, botName, welcomeMessage, apiKey } = body;
+    const { siteName, botName, welcomeMessage, apiKey, botId } = body;
 
     if (!siteName || !botName) {
       return NextResponse.json(
@@ -141,7 +141,8 @@ export async function POST(request: Request) {
     try {
       // Use raw queries to match actual schema
       const siteId = crypto.randomUUID();
-      const botId = crypto.randomUUID();
+      // Use provided botId or generate a new one
+      const botIdToUse = botId || crypto.randomUUID();
       
       // Create site
       await db.$executeRaw`
@@ -152,7 +153,7 @@ export async function POST(request: Request) {
       // Create bot
       await db.$executeRaw`
         INSERT INTO bots (id, "siteId", name, "welcomeMessage", status, "widgetSettings", "createdAt", "updatedAt")
-        VALUES (${botId}, ${siteId}, ${botName}, ${welcomeMessage || null}, 'draft', '{}', NOW(), NOW())
+        VALUES (${botIdToUse}, ${siteId}, ${botName}, ${welcomeMessage || null}, 'draft', '{}', NOW(), NOW())
       `;
       
       // Fetch the created bot
@@ -168,7 +169,7 @@ export async function POST(request: Request) {
           s.name as site_name
         FROM bots b
         JOIN sites s ON b."siteId" = s.id
-        WHERE b.id = ${botId}
+        WHERE b.id = ${botIdToUse}
       `;
       
       if (bots.length > 0) {
@@ -214,11 +215,12 @@ export async function POST(request: Request) {
         if (siteError) throw siteError;
         
         // Create bot via REST API
-        const botId = crypto.randomUUID();
+        // Use provided botId or generate a new one
+        const botIdToUse = botId || crypto.randomUUID();
         const { data: botData, error: botError } = await supabaseRestClient
           .from('bots')
           .insert([{
-            id: botId,
+            id: botIdToUse,
             siteId: siteData.id,
             name: botName,
             welcomeMessage: welcomeMessage || null,

@@ -10,11 +10,13 @@
   }
 
   function initWidget() {
-    // Get the container and site ID
+    // Get the container and context ID (either siteId or botId)
     const container = document.getElementById('amana-rag-widget-container');
     if (!container) return;
 
     const siteId = container.getAttribute('data-site-id');
+    // In the future, we might also support data-bot-id
+    
     if (!siteId) {
       console.error('AmanaRAG: siteId is required');
       return;
@@ -76,7 +78,7 @@
     initChatFunctionality(siteId);
   }
 
-  function initChatFunctionality(siteId) {
+  function initChatFunctionality(contextId) {
     // Get DOM elements
     const messagesContainer = document.getElementById('amana-rag-messages');
     const inputElement = document.getElementById('amana-rag-input');
@@ -149,7 +151,8 @@
     // Send message to API
     async function sendMessage(message) {
       try {
-        const response = await fetch(`/api/chat/${siteId}`, {
+        // Use the contextId (which can be either siteId or botId) for the API call
+        const response = await fetch(`/api/chat/${contextId}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

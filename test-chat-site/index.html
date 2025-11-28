@@ -64,6 +64,7 @@
             border-radius: 4px;
             cursor: pointer;
             font-size: 1rem;
+            margin-right: 0.5rem;
         }
         button:hover {
             background-color: #5a3bb0;
@@ -89,6 +90,21 @@
             color: #721c24;
             border: 1px solid #f5c6cb;
             display: block;
+        }
+        /* New styles for bot ID configuration */
+        .advanced-config {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid #eee;
+        }
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        .checkbox-group input[type="checkbox"] {
+            width: auto;
+            margin-right: 0.5rem;
         }
     </style>
 </head>
@@ -120,11 +136,46 @@
         <!-- Widget Configuration Section -->
         <div class="widget-config">
             <h3>Configure Chat Widget</h3>
-            <p>Enter your Site ID to test the AmanaRAG chat widget:</p>
+            <p>Enter your Site ID or Bot ID to test the AmanaRAG chat widget:</p>
             
             <div class="form-group">
-                <label for="siteId">Site ID:</label>
-                <input type="text" id="siteId" placeholder="Enter your site ID (e.g., cmiacw2od0002rc4lfqzzved6)" value="cmiacw2od0002rc4lfqzzved6">
+                <label for="siteId">Site ID (optional if using Bot ID):</label>
+                <input type="text" id="siteId" placeholder="Enter your site ID" value="a35589fd-9470-4dae-a4ab-4f32d5c4fb70">
+            </div>
+            
+            <div class="checkbox-group">
+                <input type="checkbox" id="useBotId" checked>
+                <label for="useBotId">Use specific Bot ID</label>
+            </div>
+            
+            <div class="form-group" id="botIdGroup">
+                <label for="botId">Bot ID:</label>
+                <input type="text" id="botId" placeholder="Enter your bot ID" value="3c372145-2864-4562-b65d-4b1aeeaac606">
+            </div>
+            
+            <div class="advanced-config">
+                <div class="form-group">
+                    <label for="color">Widget Color (hex):</label>
+                    <input type="text" id="color" placeholder="e.g., 6B46C1" value="b6b5ba">
+                </div>
+                
+                <div class="form-group">
+                    <label for="radius">Button Radius:</label>
+                    <select id="radius">
+                        <option value="0px">Square</option>
+                        <option value="8px">Rounded</option>
+                        <option value="16px">More Rounded</option>
+                        <option value="50%" selected>Circle</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="position">Position:</label>
+                    <select id="position">
+                        <option value="bottom-right" selected>Bottom Right</option>
+                        <option value="bottom-left">Bottom Left</option>
+                    </select>
+                </div>
             </div>
             
             <button id="loadWidget">Load Chat Widget</button>
@@ -136,9 +187,9 @@
         <h3>How to Test:</h3>
         <ol>
             <li>Make sure your AmanaRAG server is running on http://localhost:3000</li>
-            <li>Enter your Site ID in the field above and click "Load Chat Widget"</li>
-            <li>The chat widget should appear in the bottom-right corner</li>
-            <li>Click the purple chat button to open the chat interface</li>
+            <li>Configure the widget settings above and click "Load Chat Widget"</li>
+            <li>The chat widget should appear in the specified position</li>
+            <li>Click the chat button to open the chat interface</li>
             <li>Try asking questions about the content you've uploaded</li>
         </ol>
     </div>
@@ -151,12 +202,23 @@
     (function() {
         // Get DOM elements
         const siteIdInput = document.getElementById('siteId');
+        const useBotIdCheckbox = document.getElementById('useBotId');
+        const botIdGroup = document.getElementById('botIdGroup');
+        const botIdInput = document.getElementById('botId');
+        const colorInput = document.getElementById('color');
+        const radiusSelect = document.getElementById('radius');
+        const positionSelect = document.getElementById('position');
         const loadButton = document.getElementById('loadWidget');
         const unloadButton = document.getElementById('unloadWidget');
         const statusDiv = document.getElementById('status');
         
         // Store reference to loaded widget script
         let widgetScript = null;
+        
+        // Toggle bot ID visibility based on checkbox
+        useBotIdCheckbox.addEventListener('change', function() {
+            botIdGroup.style.display = this.checked ? 'block' : 'none';
+        });
         
         // Function to show status message
         function showStatus(message, type) {
@@ -167,8 +229,18 @@
         // Function to load the widget
         function loadWidget() {
             const siteId = siteIdInput.value.trim();
+            const useBotId = useBotIdCheckbox.checked;
+            const botId = botIdInput.value.trim();
+            const color = colorInput.value.trim();
+            const radius = radiusSelect.value;
+            const position = positionSelect.value;
             
-            if (!siteId) {
+            if (useBotId && !botId) {
+                showStatus('Please enter a valid Bot ID', 'error');
+                return;
+            }
+            
+            if (!useBotId && !siteId) {
                 showStatus('Please enter a valid Site ID', 'error');
                 return;
             }
@@ -183,20 +255,33 @@
                 if (existingIframe) existingIframe.remove();
             }
             
+            // Build query parameters
+            const queryParams = new URLSearchParams();
+            if (useBotId) {
+                queryParams.set('botId', botId);
+            } else {
+                queryParams.set('siteId', siteId);
+            }
+            
+            if (color) queryParams.set('color', color);
+            if (radius) queryParams.set('radius', radius);
+            if (position) queryParams.set('position', position);
+            
             // Create new script element
             widgetScript = document.createElement('script');
-            widgetScript.src = `http://localhost:3000/widget.js?siteId=${siteId}`;
+            widgetScript.src = `http://localhost:3000/widget.js?${queryParams.toString()}`;
             widgetScript.async = true;
             
             // Add event listeners for load/error
             widgetScript.onload = function() {
-                showStatus(`Chat widget loaded successfully for site ID: ${siteId}`, 'success');
+                const idUsed = useBotId ? `bot ID: ${botId}` : `site ID: ${siteId}`;
+                showStatus(`Chat widget loaded successfully for ${idUsed}`, 'success');
                 loadButton.disabled = true;
                 unloadButton.disabled = false;
             };
             
             widgetScript.onerror = function() {
-                showStatus('Failed to load chat widget. Please check your site ID and ensure the server is running.', 'error');
+                showStatus('Failed to load chat widget. Please check your IDs and ensure the server is running.', 'error');
                 loadButton.disabled = false;
                 unloadButton.disabled = true;
             };
@@ -229,11 +314,15 @@
         loadButton.addEventListener('click', loadWidget);
         unloadButton.addEventListener('click', unloadWidget);
         
-        // Load widget by default with the initial site ID
+        // Initialize UI state
+        botIdGroup.style.display = useBotIdCheckbox.checked ? 'block' : 'none';
+        
+        // Load widget by default with the initial configuration
         window.addEventListener('load', function() {
-            if (siteIdInput.value.trim()) {
+            // Small delay to ensure DOM is fully ready
+            setTimeout(function() {
                 loadWidget();
-            }
+            }, 100);
         });
     })();
     </script>

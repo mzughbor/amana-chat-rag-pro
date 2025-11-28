@@ -9,7 +9,6 @@ import crypto from "crypto";
 type ConversationRecord = {
   id: string;
   botId?: string | null;
-  siteId?: string | null;
 };
 
 type MessageRow = {
@@ -129,7 +128,7 @@ async function getConversationById(
   try {
     if (!useRestApi) {
       const rows: ConversationRecord[] = await db.$queryRaw`
-        SELECT id, "botId", "siteId"
+        SELECT id, "botId"
         FROM conversations
         WHERE id = ${conversationId}
         LIMIT 1
@@ -139,7 +138,7 @@ async function getConversationById(
 
     const { data, error } = await supabaseRestClient
       .from("conversations")
-      .select("id, botId, siteId")
+      .select("id, botId")
       .eq("id", conversationId)
       .limit(1)
       .single();
@@ -163,9 +162,9 @@ async function findConversationForVisitor(
   try {
     if (!useRestApi) {
       const rows: ConversationRecord[] = await db.$queryRaw`
-        SELECT id, "botId", "siteId"
+        SELECT id, "botId"
         FROM conversations
-        WHERE COALESCE("botId", "siteId") = ${contextId} AND "visitorId" = ${visitorId}
+        WHERE "botId" = ${contextId} AND "visitorId" = ${visitorId}
         ORDER BY "updatedAt" DESC
         LIMIT 1
       `;
@@ -174,9 +173,9 @@ async function findConversationForVisitor(
 
     const { data, error } = await supabaseRestClient
       .from("conversations")
-      .select("id, botId, siteId")
+      .select("id, botId")
       .eq("visitorId", visitorId)
-      .or(`botId.eq.${contextId},siteId.eq.${contextId}`)
+      .eq("botId", contextId)
       .order("updatedAt", { ascending: false })
       .limit(1)
       .single();
@@ -194,17 +193,16 @@ async function findConversationForVisitor(
 
 async function createConversation(
   botId: string | null,
-  siteId: string | null,
   visitorId: string,
   useRestApi: boolean,
 ): Promise<ConversationRecord> {
   const id = crypto.randomUUID();
   if (!useRestApi) {
     await db.$executeRaw`
-      INSERT INTO conversations (id, "botId", "siteId", "visitorId", messages, "createdAt", "updatedAt")
-      VALUES (${id}, ${botId}, ${siteId}, ${visitorId}, '[]'::jsonb, NOW(), NOW())
+      INSERT INTO conversations (id, "botId", "visitorId", "createdAt", "updatedAt")
+      VALUES (${id}, ${botId}, ${visitorId}, NOW(), NOW())
     `;
-    return { id, botId, siteId };
+    return { id, botId };
   }
 
   const now = new Date().toISOString();
@@ -214,11 +212,9 @@ async function createConversation(
       {
         id,
         botId,
-        siteId,
         visitorId,
-        messages: [],
-        createdAt: now,
-        updatedAt: now,
+        createdAt: new Date(now), // Convert to Date object
+        updatedAt: new Date(now), // Convert to Date object
       },
     ]);
 
@@ -226,7 +222,7 @@ async function createConversation(
     throw error;
   }
 
-  return { id, botId, siteId };
+  return { id, botId };
 }
 
 async function fetchMessagesForConversation(
@@ -267,7 +263,7 @@ async function insertMessageRecord(
   if (!useRestApi) {
     await db.$executeRaw`
       INSERT INTO messages (id, "conversationId", role, content, "createdAt")
-      VALUES (${id}, ${conversationId}, ${role}, ${content}, ${createdAt})
+      VALUES (${id}, ${conversationId}, ${role}, ${content}, ${createdAt}::timestamp)
     `;
     await db.$executeRaw`
       UPDATE conversations SET "updatedAt" = NOW() WHERE id = ${conversationId}
@@ -281,7 +277,7 @@ async function insertMessageRecord(
           conversationId,
           role,
           content,
-          createdAt,
+          createdAt: new Date(createdAt), // Convert to Date object
         },
       ]);
 
@@ -291,7 +287,7 @@ async function insertMessageRecord(
 
     await supabaseRestClient
       .from("conversations")
-      .update({ updatedAt: createdAt })
+      .update({ updatedAt: new Date().toISOString() }) // Use current timestamp
       .eq("id", conversationId);
   }
 
@@ -424,7 +420,6 @@ export async function POST(
     if (!conversation) {
       conversation = await createConversation(
         bot ? bot.id : null,
-        bot ? bot.siteId : site?.id ?? null,
         visitorIdFinal,
         useRestApi,
       );
@@ -446,7 +441,6 @@ Context:
 ${context}
 
 Answer the user's question based on the context above. Be concise and helpful.`;
-
     const openai = new OpenAI({ apiKey });
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",

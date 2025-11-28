@@ -33,6 +33,13 @@
             border-radius: 4px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
+        .widget-info {
+            background-color: #e6f4ff;
+            border: 1px solid #b3d9ff;
+            border-radius: 4px;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
     </style>
 </head>
 <body>
@@ -60,11 +67,19 @@
             <p>Powered by RAG technology for intelligent, context-aware responses.</p>
         </div>
         
+        <div class="widget-info">
+            <h3>Current Widget Configuration</h3>
+            <p><strong>Bot ID:</strong> 3c372145-2864-4562-b65d-4b1aeeaac606</p>
+            <p><strong>Color:</strong> b6b5ba (Gray)</p>
+            <p><strong>Button Shape:</strong> Square (0px radius)</p>
+            <p><strong>Position:</strong> Bottom Right</p>
+        </div>
+        
         <h3>How to Test:</h3>
         <ol>
             <li>Make sure your AmanaRAG server is running on http://localhost:3000</li>
             <li>The chat widget should appear in the bottom-right corner</li>
-            <li>Click the purple chat button to open the chat interface</li>
+            <li>Click the gray chat button to open the chat interface</li>
             <li>Try asking questions about the content you've uploaded</li>
         </ol>
     </div>
@@ -74,11 +89,10 @@
     </footer>
 
     <!-- AmanaRAG Chat Widget -->
-
     <script>
     (function() {
         var script = document.createElement('script');
-        script.src = 'http://localhost:3000/widget.js?siteId=cmieozmb7000211rw914f1ei3';
+        script.src = 'http://localhost:3000/widget.js?botId=3c372145-2864-4562-b65d-4b1aeeaac606&color=b6b5ba&radius=0px&position=bottom-right';
         script.async = true;
         document.head.appendChild(script);
     })();

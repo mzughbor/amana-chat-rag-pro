@@ -5,13 +5,18 @@
   const scriptSrc = document.currentScript?.src || '';
   const scriptParams = new URLSearchParams(scriptSrc.split('?')[1] || '');
   const siteId = scriptParams.get('siteId');
+  const botId = scriptParams.get('botId'); // Support botId parameter as well
   const colorParam = scriptParams.get('color') || '6B46C1'; // Default purple
   const radiusParam = scriptParams.get('radius') || '50%'; // Default rounded
 
-  if (!siteId) {
-    console.error('AmanaRAG: siteId is required');
+  // Either siteId or botId is required
+  if (!siteId && !botId) {
+    console.error('AmanaRAG: either siteId or botId is required');
     return;
   }
+
+  // Use botId if provided, otherwise fall back to siteId
+  const contextId = botId || siteId;
 
   // Parse color (add # if not present)
   const primaryColor = colorParam.startsWith('#') ? colorParam : `#${colorParam}`;
@@ -57,8 +62,8 @@
 
   // Create iframe for chat
   let chatIframe = null;
-  // Use the widget-specific chat route
-  const chatUrl = `http://localhost:3000/widget/chat/${siteId}`;
+  // Use the widget-specific chat route with the contextId (either botId or siteId)
+  const chatUrl = `http://localhost:3000/widget/chat/${contextId}`;
 
   widgetButton.addEventListener('click', function () {
     if (chatIframe) {
