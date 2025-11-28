@@ -64,7 +64,7 @@
   let chatIframe = null;
   // Use the widget-specific chat route with the contextId (either botId or siteId)
   // Pass color and other settings as URL parameters
-  const chatUrl = `http://localhost:3000/widget/chat/${contextId}?color=${encodeURIComponent(colorParam)}&radius=${encodeURIComponent(radiusParam)}`;
+  const chatUrl = `${window.location.origin}/widget/chat/${contextId}?color=${encodeURIComponent(colorParam)}&radius=${encodeURIComponent(radiusParam)}`;
 
   widgetButton.addEventListener('click', function () {
     if (chatIframe) {
