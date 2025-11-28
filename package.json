@@ -12,7 +12,7 @@
     "db:generate": "prisma generate",
     "postinstall": "prisma generate",
     "docker:build": "docker build -t amana-rag .",
-    "docker:run": "docker run -p 3000:3000 amana-rag",
+    "docker:run": "docker run -e PORT=${PORT:-3000} -p ${PORT:-3000}:${PORT:-3000} amana-rag",
     "docker:dev": "docker-compose up --build"
   },
   "dependencies": {

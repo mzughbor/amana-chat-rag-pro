@@ -20,8 +20,8 @@ COPY . .
 # Build the Next.js application
 RUN npm run build
 
-# Expose port
-EXPOSE 3000
+# Expose port from environment variable or default to 3000
+EXPOSE ${PORT:-3000}
 
 # Start the application
 CMD ["npm", "start"]
