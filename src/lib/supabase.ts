@@ -93,5 +93,7 @@ export function getSupabaseAdmin() {
 }
 
 // Export getter functions instead of direct clients
+// Note: These should only be used in server components and API routes
+// For client components, use supabaseClient from ~/lib/supabaseClient
 export const supabase = getSupabase();
 export const supabaseAdmin = getSupabaseAdmin();

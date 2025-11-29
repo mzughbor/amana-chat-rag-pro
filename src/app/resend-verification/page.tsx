@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { supabase } from "~/lib/supabase";
+import { supabaseClient } from "~/lib/supabaseClient";
 import Button from "~/components/common/Button";
 import Input from "~/components/common/Input";
 import Card from "~/components/common/Card";
@@ -22,7 +22,7 @@ export default function ResendVerificationPage() {
     setLoading(true);
 
     try {
-      const { error: resendError } = await supabase.auth.resend({
+      const { error: resendError } = await supabaseClient.auth.resend({
         type: "signup",
         email: email,
       });
