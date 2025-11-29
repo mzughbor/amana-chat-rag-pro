@@ -8,6 +8,31 @@ import Button from "~/components/common/Button";
 import Toast from "~/components/common/Toast";
 import { ChatBubbleIcon } from "~/components/icons/ChatBubbleIcon";
 
+// Safe date display component to avoid hydration mismatch
+// Formats date only on client side after hydration
+function DateDisplay({ dateString }: { dateString: string }) {
+  const [formattedDate, setFormattedDate] = useState<string>(dateString);
+  const [isMounted, setIsMounted] = useState(false);
+  
+  useEffect(() => {
+    setIsMounted(true);
+    // Format date only after component is mounted (client-side)
+    if (dateString) {
+      try {
+        const date = new Date(dateString);
+        setFormattedDate(date.toLocaleDateString());
+      } catch (error) {
+        setFormattedDate(dateString);
+      }
+    }
+  }, [dateString]);
+  
+  // During SSR and initial hydration, show ISO string
+  // After hydration, show formatted date
+  // Using suppressHydrationWarning to prevent React warning
+  return <span suppressHydrationWarning>{isMounted ? formattedDate : dateString}</span>;
+}
+
 interface Document {
   id: string;
   filename: string;
@@ -754,15 +779,7 @@ export default function UploadContent({
                       )}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                      {(() => {
-                        const createdAtValue = doc.createdAt;
-                        if (typeof createdAtValue === 'string') {
-                          return new Date(createdAtValue).toLocaleDateString();
-                        } else {
-                          // Fallback for any unexpected types
-                          return String(createdAtValue);
-                        }
-                      })()}
+                      <DateDisplay dateString={doc.createdAt} />
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
                       <button
