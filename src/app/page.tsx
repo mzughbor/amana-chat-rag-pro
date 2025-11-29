@@ -7,13 +7,31 @@ import Button from "~/components/common/Button";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export default async function HomePage() {
+interface HomePageProps {
+  searchParams?: { logout?: string; t?: string };
+}
+
+export default async function HomePage({ searchParams }: HomePageProps) {
   const cookieStore = await cookies();
   const sessionToken = cookieStore.get("next-auth.session-token") || 
                        cookieStore.get("__Secure-next-auth.session-token");
 
-  if (sessionToken) {
+  // If logout parameter is present, don't redirect even if token exists
+  // This handles the case where logout just happened but token hasn't been cleared yet
+  // Also check if token is actually valid by trying to decode it
+  const hasLogoutParam = searchParams?.logout === "true";
+  
+  if (sessionToken && !hasLogoutParam) {
+    // Only redirect if token exists and logout param is not present
     redirect("/dashboard");
+  }
+  
+  // Log for debugging in production
+  if (process.env.NODE_ENV === "production") {
+    if (hasLogoutParam) {
+      console.log("[HomePage] Logout parameter detected, allowing access to home page");
+    }
+    console.log(`[HomePage] Session token exists: ${!!sessionToken}, Logout param: ${hasLogoutParam}`);
   }
 
   return (

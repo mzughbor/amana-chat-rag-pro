@@ -22,13 +22,32 @@ export default function Navbar() {
       // Sign out from NextAuth - this will clear the session cookie
       await signOut({ 
         callbackUrl: "/",
-        redirect: true 
+        redirect: false // Don't use NextAuth redirect, handle it manually
       });
+      
+      // Force hard redirect to home page with cache busting
+      // This ensures we don't get redirected back to dashboard
+      if (typeof window !== "undefined") {
+        // Clear any cached data
+        window.sessionStorage.clear();
+        window.localStorage.clear();
+        
+        // Force hard redirect to home page
+        window.location.href = "/?logout=true&t=" + Date.now();
+      } else {
+        // Fallback for SSR
+        router.push("/");
+        router.refresh();
+      }
     } catch (error) {
       console.error("Logout error:", error);
       // If signOut fails, force redirect to home page
-      router.push("/");
-      router.refresh();
+      if (typeof window !== "undefined") {
+        window.location.href = "/?logout=true&t=" + Date.now();
+      } else {
+        router.push("/");
+        router.refresh();
+      }
     }
   };
 
