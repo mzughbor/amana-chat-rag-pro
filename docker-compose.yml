@@ -11,8 +11,8 @@ services:
       - NEXTAUTH_URL=https://amana-chat-rag-pro.onrender.com
       # NOTE: These localhost URLs are for local development only
       # On Render, use the Render Postgres connection string with ?sslmode=require
-      - DATABASE_URL=postgresql://postgres:password@localhost:5432/amana_rag
-      - DIRECT_URL=postgresql://postgres:password@localhost:5432/amana_rag
+      # DATABASE_URL=postgresql://postgres:password@localhost:5432/amana_rag
+      # DIRECT_URL=postgresql://postgres:password@localhost:5432/amana_rag
       - NEXT_PUBLIC_SUPABASE_URL=https://your-supabase-url.supabase.co
       - NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
       - SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
