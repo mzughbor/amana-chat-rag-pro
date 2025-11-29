@@ -105,14 +105,16 @@ export default async function UploadPage({ searchParams }: UploadPageProps) {
   if (botsData.length > 0) {
     // Use botId from query params if provided, otherwise use the first bot
     defaultBotId = botsData[0].id;
-  if (searchParams.botId && botsData.length > 0) {
-    // Validate that the botId exists and belongs to the user
-    const requestedBot = botsData.find(bot => bot.id === searchParams.botId);
-    if (requestedBot) {
-      defaultBotId = searchParams.botId;
-    } else {
-      console.warn(`Bot ID ${searchParams.botId} not found or doesn't belong to user, using default bot`);
-      defaultBotId = botsData[0]?.id || null;
+    
+    if (searchParams.botId) {
+      // Validate that the botId exists and belongs to the user
+      const requestedBot = botsData.find(bot => bot.id === searchParams.botId);
+      if (requestedBot) {
+        defaultBotId = searchParams.botId;
+      } else {
+        console.warn(`Bot ID ${searchParams.botId} not found or doesn't belong to user, using default bot`);
+        defaultBotId = botsData[0]?.id || null;
+      }
     }
   }
   
@@ -134,26 +136,27 @@ export default async function UploadPage({ searchParams }: UploadPageProps) {
         ORDER BY "createdAt" DESC
       `;
       documents = newDocs;
-  } catch (error: any) {
-    console.warn("New schema query failed, trying fallback:", error.message);
-    // Fallback: try with COALESCE for backward compatibility
-    try {
-      const fallbackDocs = await db.$queryRaw<any[]>`
-        SELECT 
-          id,
-          COALESCE("fileName", filename) as filename,
-          COALESCE("ingestionStatus", status) as status,
-          "errorMessage",
-          "createdAt"
-        FROM documents
-        WHERE "botId" = ${defaultBotId} OR "siteId" = (SELECT "siteId" FROM bots WHERE id = ${defaultBotId} LIMIT 1)
-        ORDER BY "createdAt" DESC
-      `;
-      documents = fallbackDocs;
-    } catch (fallbackError: any) {
-      console.error("Error fetching documents:", fallbackError);
-      // Last resort: return empty array
-      documents = [];
+    } catch (error: any) {
+      console.warn("New schema query failed, trying fallback:", error.message);
+      // Fallback: try with COALESCE for backward compatibility
+      try {
+        const fallbackDocs = await db.$queryRaw<any[]>`
+          SELECT 
+            id,
+            COALESCE("fileName", filename) as filename,
+            COALESCE("ingestionStatus", status) as status,
+            "errorMessage",
+            "createdAt"
+          FROM documents
+          WHERE "botId" = ${defaultBotId} OR "siteId" = (SELECT "siteId" FROM bots WHERE id = ${defaultBotId} LIMIT 1)
+          ORDER BY "createdAt" DESC
+        `;
+        documents = fallbackDocs;
+      } catch (fallbackError: any) {
+        console.error("Error fetching documents:", fallbackError);
+        // Last resort: return empty array
+        documents = [];
+      }
     }
   }
 
