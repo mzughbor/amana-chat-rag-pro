@@ -654,8 +654,10 @@ export default function UploadContent({
             )}
           </div>
         </div>
+        )}
 
         {/* Documents List */}
+        {bots.length > 0 && botId && (
         <div className="mt-8">
           <h2 className="text-lg font-semibold text-gray-900">Documents</h2>
           <div className="mt-4 overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
