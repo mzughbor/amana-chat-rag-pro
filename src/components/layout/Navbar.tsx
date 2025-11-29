@@ -18,8 +18,18 @@ export default function Navbar() {
 
   const handleLogout = async () => {
     setShowLogoutModal(false);
-    await signOut({ callbackUrl: "/" });
-    router.push("/");
+    try {
+      // Sign out from NextAuth - this will clear the session cookie
+      await signOut({ 
+        callbackUrl: "/",
+        redirect: true 
+      });
+    } catch (error) {
+      console.error("Logout error:", error);
+      // If signOut fails, force redirect to home page
+      router.push("/");
+      router.refresh();
+    }
   };
 
   return (

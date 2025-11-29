@@ -6,6 +6,10 @@ import { encryptApiKey, decryptApiKey } from "~/server/services/encryption";
 import OpenAI from "openai";
 import { supabaseRestClient } from "~/lib/supabaseRestClient";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const runtime = "nodejs";
+
 /**
  * POST /api/bots/[botId]/api-key
  * Save encrypted API key for a bot

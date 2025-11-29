@@ -4,6 +4,10 @@ import { db } from "~/lib/db";
 import { supabaseAdmin } from "~/lib/supabase";
 import { supabaseRestClient } from "~/lib/supabaseRestClient";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const runtime = "nodejs";
+
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const session = await getServerAuthSessionFromRequest(request);

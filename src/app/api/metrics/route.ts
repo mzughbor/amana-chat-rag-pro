@@ -4,6 +4,10 @@ import { authOptions } from "~/server/auth";
 import { db } from "~/lib/db";
 import { supabaseRestClient } from "~/lib/supabaseRestClient";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const runtime = "nodejs";
+
 interface MetricsResponse {
   documents: number;
   messages: number;

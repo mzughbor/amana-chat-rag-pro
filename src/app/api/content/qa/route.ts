@@ -6,6 +6,10 @@ import { generateEmbeddings } from "~/server/services/embeddingService";
 import { encryptApiKey, decryptApiKey } from "~/server/services/encryption";
 import crypto from "crypto";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const runtime = "nodejs";
+
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerAuthSessionFromRequest(request);

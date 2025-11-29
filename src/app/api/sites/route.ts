@@ -4,6 +4,10 @@ import { authOptions } from "~/server/auth";
 import { db } from "~/lib/db";
 import { getSitesByUserEmail, createSite } from "~/lib/supabaseRestClient";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const runtime = "nodejs";
+
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);

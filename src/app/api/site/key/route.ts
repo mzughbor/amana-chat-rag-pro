@@ -4,6 +4,10 @@ import { db } from "~/lib/db";
 import { encryptApiKey, decryptApiKey } from "~/server/services/encryption";
 import OpenAI from "openai";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const runtime = "nodejs";
+
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerAuthSessionFromRequest(request);

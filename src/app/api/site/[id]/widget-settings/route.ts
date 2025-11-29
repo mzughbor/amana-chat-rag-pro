@@ -3,6 +3,10 @@ import { getServerAuthSessionFromRequest } from "~/server/auth";
 import { db } from "~/lib/db";
 import { supabaseRestClient } from "~/lib/supabaseRestClient";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const runtime = "nodejs";
+
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const session = await getServerAuthSessionFromRequest(request);

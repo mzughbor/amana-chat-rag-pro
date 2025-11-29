@@ -40,7 +40,7 @@ export async function retrieveContext(
     LIMIT ${k}
   `;
 
-  return results.map((r) => ({
+  return results.map((r: { id: string; chunkText: string; metadata: any; similarity: number }) => ({
     text: r.chunkText,
     metadata: r.metadata,
     similarity: Number(r.similarity),

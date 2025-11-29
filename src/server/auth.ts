@@ -186,6 +186,13 @@ export const authOptions: NextAuthOptions = {
   pages: {
     signIn: "/login",
   },
+  events: {
+    async signOut() {
+      // NextAuth will handle clearing the session token
+      // Supabase session is stateless, so no need to clear it separately
+      // The JWT token will be invalidated automatically
+    },
+  },
 };
 
 /**

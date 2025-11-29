@@ -4,6 +4,9 @@ import { db } from "~/lib/db";
 import { getSiteByUserId } from "~/lib/supabaseRestClient";
 import UploadContent from "~/features/upload/components/UploadContent";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 interface UploadPageProps {
   searchParams: { botId?: string };
 }

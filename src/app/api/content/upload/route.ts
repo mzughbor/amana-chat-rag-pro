@@ -8,6 +8,10 @@ import { generateEmbeddings } from "~/server/services/embeddingService";
 import { encryptApiKey, decryptApiKey } from "~/server/services/encryption";
 import { randomUUID } from "crypto";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const runtime = "nodejs";
+
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 export async function POST(request: NextRequest) {

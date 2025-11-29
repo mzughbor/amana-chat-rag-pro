@@ -4,6 +4,9 @@ import Link from "next/link";
 import Card from "~/components/common/Card";
 import Button from "~/components/common/Button";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function HomePage() {
   const cookieStore = await cookies();
   const sessionToken = cookieStore.get("next-auth.session-token") || 

@@ -5,6 +5,10 @@ import { db } from "~/lib/db";
 import { getSitesByUserEmail, supabaseRestClient } from "~/lib/supabaseRestClient";
 import crypto from "crypto";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const runtime = "nodejs";
+
 /**
  * GET /api/bots
  * Get all bots for the authenticated user (via their sites)
