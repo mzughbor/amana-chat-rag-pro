@@ -14,7 +14,15 @@ interface UploadPageProps {
 export default async function UploadPage({ searchParams }: UploadPageProps) {
   const session = await getServerAuthSession();
 
+  // Log session state for debugging in production
+  if (process.env.NODE_ENV === "production") {
+    console.log(`[UploadPage] Session exists: ${!!session}, User ID: ${session?.user?.id || "none"}`);
+  }
+
   if (!session?.user) {
+    if (process.env.NODE_ENV === "production") {
+      console.log(`[UploadPage] No session, redirecting to /login`);
+    }
     redirect("/login");
   }
 

@@ -208,7 +208,17 @@ export async function getServerAuthSession(): Promise<Session | null> {
     const sessionToken = cookieStore.get("next-auth.session-token")?.value ||
                          cookieStore.get("__Secure-next-auth.session-token")?.value;
 
+    // Log for debugging in production
+    if (process.env.NODE_ENV === "production") {
+      console.log(`[getServerAuthSession] Session token exists: ${!!sessionToken}`);
+      const allCookies = cookieStore.getAll();
+      console.log(`[getServerAuthSession] Total cookies: ${allCookies.length}`);
+    }
+
     if (!sessionToken) {
+      if (process.env.NODE_ENV === "production") {
+        console.log(`[getServerAuthSession] No session token found`);
+      }
       return null;
     }
 
@@ -224,6 +234,9 @@ export async function getServerAuthSession(): Promise<Session | null> {
     });
 
     if (!token || !token.email) {
+      if (process.env.NODE_ENV === "production") {
+        console.log(`[getServerAuthSession] Token invalid or missing email`);
+      }
       return null;
     }
 
@@ -235,7 +248,14 @@ export async function getServerAuthSession(): Promise<Session | null> {
       .single();
 
     if (userError || !userData) {
+      if (process.env.NODE_ENV === "production") {
+        console.log(`[getServerAuthSession] User fetch error: ${userError?.message || "No user data"}`);
+      }
       return null;
+    }
+
+    if (process.env.NODE_ENV === "production") {
+      console.log(`[getServerAuthSession] Session created successfully for user: ${userData.email}`);
     }
 
     return {
@@ -248,7 +268,10 @@ export async function getServerAuthSession(): Promise<Session | null> {
       expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
     } as Session;
   } catch (error) {
-    console.error("Error getting server session:", error);
+    console.error("[getServerAuthSession] Error getting server session:", error);
+    if (process.env.NODE_ENV === "production") {
+      console.error(`[getServerAuthSession] Error details:`, error instanceof Error ? error.message : String(error));
+    }
     return null;
   }
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { signIn, useSession } from "next-auth/react";
 import Link from "next/link";
 import Button from "~/components/common/Button";
@@ -10,19 +10,23 @@ import Card from "~/components/common/Card";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: session, status } = useSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Redirect to dashboard if already logged in
+  // Redirect to callbackUrl or dashboard if already logged in
   useEffect(() => {
     if (status === "authenticated" && session) {
-      router.push("/dashboard");
+      const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
+      // Ensure callbackUrl is a relative path (security)
+      const safeCallbackUrl = callbackUrl.startsWith("/") ? callbackUrl : "/dashboard";
+      router.push(safeCallbackUrl);
       router.refresh();
     }
-  }, [session, status, router]);
+  }, [session, status, router, searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,9 +51,19 @@ export default function LoginPage() {
         }
         setLoading(false);
       } else if (result?.ok) {
+        // Get callbackUrl from query params or default to dashboard
+        const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
+        // Ensure callbackUrl is a relative path (security)
+        const safeCallbackUrl = callbackUrl.startsWith("/") ? callbackUrl : "/dashboard";
+        
+        // Log for debugging in production
+        if (process.env.NODE_ENV === "production") {
+          console.log(`[LoginPage] Redirecting to: ${safeCallbackUrl}`);
+        }
+        
         // Wait a bit for session to update, then redirect
         setTimeout(() => {
-          router.push("/dashboard");
+          router.push(safeCallbackUrl);
           router.refresh();
         }, 100);
       } else {
