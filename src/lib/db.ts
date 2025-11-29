@@ -1,3 +1,4 @@
+import "./env";
 import { PrismaClient } from "@prisma/client";
 
 const globalForPrisma = globalThis as unknown as {
@@ -77,9 +78,7 @@ export function getDb(): PrismaClient {
     // Check if using pooler and suggest direct connection if needed
     // "If you encounter connection issues, try Direct Connection (port 5432) instead."
     if (databaseUrl.includes("pooler.supabase.com") && databaseUrl.includes(":6543")) {
-      console.log(
-        "ℹ️  Using Supabase Connection Pooler (port 6543).\n"
-      );
+      // Using Supabase Connection Pooler (port 6543)
     }
   }
   
@@ -111,7 +110,6 @@ export async function ensureDbConnection() {
     connectionAttempted = true;
     const client = getDb();
     await client.$connect();
-    console.log("✅ Database connection established");
   } catch (error: any) {
     connectionAttempted = false; // Allow retry
     

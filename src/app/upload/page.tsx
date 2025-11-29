@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerAuthSession } from "~/server/auth";
 import { db } from "~/lib/db";
 import { getSiteByUserId } from "~/lib/supabaseRestClient";
-import UploadContent from "~/components/upload/UploadContent";
+import UploadContent from "~/features/upload/components/UploadContent";
 
 interface UploadPageProps {
   searchParams: { botId?: string };
@@ -20,7 +20,6 @@ export default async function UploadPage({ searchParams }: UploadPageProps) {
   let botsData: any[] = [];
   
   try {
-    console.log("Attempting to fetch sites and bots from database for user:", session.user.id);
     // Use raw query to get all sites and their bots for the user
     const sites: any[] = await db.$queryRaw`
       SELECT s.id as "siteId", s.name as "siteName", s."userId", b.id as "botId", b.name as "botName"
@@ -30,7 +29,6 @@ export default async function UploadPage({ searchParams }: UploadPageProps) {
       ORDER BY s."createdAt" DESC
     `;
     
-    console.log("Database query result:", sites.length, "sites/bots found");
     
     // Group by site
     const sitesMap: Record<string, any> = {};
@@ -63,18 +61,15 @@ export default async function UploadPage({ searchParams }: UploadPageProps) {
       }] : []
     );
     
-    console.log("Successfully fetched sites and bots from database:", sitesData.length, "sites,", botsData.length, "bots");
   } catch (dbError: any) {
     // If database connection fails, fallback to REST API
     console.warn("Database connection failed, falling back to REST API:", dbError.message);
     
     try {
-      console.log("Attempting to fetch sites via REST API for user:", session.user.id);
       // For REST API, we need to make separate calls or use the existing function
       // Let's try to get sites with bots using the existing function and adapt
       const site = await getSiteByUserId(session.user.id);
       
-      console.log("REST API result:", site ? "site found" : "no site found");
       
       if (site) {
         sitesData = [{
@@ -91,7 +86,6 @@ export default async function UploadPage({ searchParams }: UploadPageProps) {
           siteId: site.id
         }));
         
-        console.log("Successfully fetched site via REST API:", site.id);
       }
     } catch (restError: any) {
       console.error("REST API fallback also failed:", restError);
@@ -102,9 +96,7 @@ export default async function UploadPage({ searchParams }: UploadPageProps) {
   }
 
   // If no bots exist, redirect to dashboard to create one
-  console.log("Final bots data count:", botsData.length);
   if (botsData.length === 0) {
-    console.log("No bots found, redirecting to dashboard");
     redirect("/dashboard");
   }
 

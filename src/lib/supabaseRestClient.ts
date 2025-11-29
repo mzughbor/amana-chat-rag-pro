@@ -1,4 +1,5 @@
 // Fallback client for Supabase REST API when direct database connection fails
+import "./env";
 import { SupabaseClient, createClient } from '@supabase/supabase-js';
 
 // Lazy initialization of Supabase REST client

@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import Button from "~/components/ui/Button";
+import Button from "~/components/common/Button";
+import { ChatBubbleIcon } from "~/components/icons/ChatBubbleIcon";
 
 type Sender = "user" | "assistant";
 
@@ -276,20 +277,8 @@ export default function ChatPage() {
             <>
               {messages.length === 0 && (
                 <div className="text-center text-slate-700 mt-20">
-                  <div className="mx-auto w-20 h-20 bg-purple-100 rounded-full flex items-center justify-center mb-4">
-                    <svg
-                      className="w-10 h-10 text-purple-600"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                      />
-                    </svg>
+                  <div className="mx-auto w-20 h-20 bg-purple-100 rounded-full flex items-center justify-center mb-4 text-purple-600">
+                    <ChatBubbleIcon className="w-10 h-10" />
                   </div>
                   <p className="text-lg font-semibold text-slate-900 mb-1">
                     Start a conversation

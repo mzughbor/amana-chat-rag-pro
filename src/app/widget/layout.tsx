@@ -1,11 +1,6 @@
 import "~/styles/globals.css";
 import type React from "react";
-import { Inter } from "next/font/google";
-
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-sans",
-});
+import { appFont } from "~/styles/fonts";
 
 export const metadata = {
   title: "Chat Widget",
@@ -18,12 +13,10 @@ export default function WidgetLayout({
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <html lang="en">
-      <body className={`font-sans ${inter.variable} min-h-screen flex flex-col bg-white`}>
-        <main className="flex-1">
-          {children}
-        </main>
-      </body>
-    </html>
+    <div className={`${appFont.variable} font-sans min-h-screen flex flex-col bg-white`}>
+      <main className="flex-1">
+        {children}
+      </main>
+    </div>
   );
 }

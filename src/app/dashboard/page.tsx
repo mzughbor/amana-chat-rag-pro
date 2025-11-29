@@ -1,15 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
-import Card from "~/components/ui/Card";
-import Button from "~/components/ui/Button";
-import Modal from "~/components/ui/Modal";
-import Toast from "~/components/ui/Toast";
-import CreateBotWizard from "~/components/dashboard/CreateBotWizard";
-import BotSettingsModal from "~/components/dashboard/BotSettingsModal";
+import Card from "~/components/common/Card";
+import Button from "~/components/common/Button";
+import Modal from "~/components/common/Modal";
+import Toast from "~/components/common/Toast";
+import CreateBotWizard from "~/features/dashboard/components/CreateBotWizard";
+import BotSettingsModal from "~/features/dashboard/components/BotSettingsModal";
 
 interface Bot {
   id: string;
@@ -34,22 +34,12 @@ export default function DashboardPage() {
   const [toastType, setToastType] = useState<"success" | "error" | "info">("info");
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [createdBot, setCreatedBot] = useState<Bot | null>(null);
+  const [metrics, setMetrics] = useState({ documents: 0, messages: 0 });
+  const [metricsLoading, setMetricsLoading] = useState(true);
 
-  useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/login");
-      return;
-    }
-
-    if (status === "authenticated") {
-      fetchUserSites();
-    }
-  }, [status, session, router]);
-
-  const fetchUserSites = async () => {
+  const fetchUserSites = useCallback(async () => {
     try {
       setLoading(true);
-      // Fetch bots from the API
       const response = await fetch("/api/bots", {
         method: "GET",
         headers: {
@@ -63,13 +53,11 @@ export default function DashboardPage() {
       }
 
       const botsData = await response.json();
-      
-      // Ensure botsData is an array
+
       const botsArray = Array.isArray(botsData) ? botsData : [];
-      
-      // Transform to bot format - handle both API response formats
+
       const transformedBots = botsArray
-        .filter((bot: any) => bot && bot.id) // Filter out null/undefined bots
+        .filter((bot: any) => bot && bot.id)
         .map((bot: any) => ({
           id: bot.id,
           name: bot.name || "Unnamed Bot",
@@ -77,17 +65,46 @@ export default function DashboardPage() {
           createdAt: bot.createdAt || new Date().toISOString(),
         }));
 
-      console.log(`✅ Fetched ${transformedBots.length} bots from API`);
       setBots(transformedBots);
     } catch (error) {
       console.error("Error fetching bots:", error);
-      // Show error message to user
       setBots([]);
-      // You could add a toast notification here if needed
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  const fetchMetrics = useCallback(async () => {
+    try {
+      setMetricsLoading(true);
+      const response = await fetch("/api/metrics");
+      if (!response.ok) {
+        throw new Error(`Failed to fetch metrics: ${response.status}`);
+      }
+      const data = await response.json();
+      setMetrics({
+        documents: data.documents ?? 0,
+        messages: data.messages ?? 0,
+      });
+    } catch (error) {
+      console.error("Error fetching metrics:", error);
+      setMetrics({ documents: 0, messages: 0 });
+    } finally {
+      setMetricsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.push("/login");
+      return;
+    }
+
+    if (status === "authenticated") {
+      fetchUserSites();
+      fetchMetrics();
+    }
+  }, [status, router, fetchUserSites, fetchMetrics]);
 
   const handleDeleteBot = async () => {
     if (!botToDelete) return;
@@ -151,7 +168,6 @@ export default function DashboardPage() {
       setToastMessage(`Bot &quot;${botToDelete.name}&quot; deleted successfully`);
       setToastType("success");
       setToastVisible(true);
-      console.log(`✅ Bot "${botToDelete.name}" deleted successfully`);
     } catch (error) {
       console.error("Error deleting bot:", error);
       setToastMessage(error instanceof Error ? error.message : "Failed to delete bot. Please try again.");
@@ -202,11 +218,15 @@ export default function DashboardPage() {
           </div>
           <div>
             <p className="text-sm text-slate-700">Messages This Month</p>
-            <p className="text-2xl font-bold text-slate-900">0</p>
+            <p className="text-2xl font-bold text-slate-900">
+              {metricsLoading ? "..." : metrics.messages.toLocaleString("en-US")}
+            </p>
           </div>
           <div>
             <p className="text-sm text-slate-700">Documents Processed</p>
-            <p className="text-2xl font-bold text-slate-900">0</p>
+            <p className="text-2xl font-bold text-slate-900">
+              {metricsLoading ? "..." : metrics.documents.toLocaleString("en-US")}
+            </p>
           </div>
         </div>
       </Card>
@@ -307,11 +327,10 @@ export default function DashboardPage() {
           onClose={() => setShowCreateBot(false)}
           onComplete={(newBot) => {
             // Add new bot to the list and refresh to get latest data
-            console.log("Bot created:", newBot);
-          setBots([...bots, newBot]);
-          setCreatedBot(newBot);
-          setShowSuccessModal(true);
-          setShowCreateBot(false);
+            setBots([...bots, newBot]);
+            setCreatedBot(newBot);
+            setShowSuccessModal(true);
+            setShowCreateBot(false);
             // Optionally refresh the list to ensure consistency
             // fetchUserSites();
           }}

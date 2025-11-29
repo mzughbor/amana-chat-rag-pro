@@ -1,9 +1,11 @@
 services:
   - type: web
     name: amana-chat-rag-pro
-    env: docker
-    plan: free
-    autoDeploy: false
+    env: node
+    plan: starter
+    autoDeploy: true
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
     healthCheckPath: /
     envVars:
       - key: NODE_ENV

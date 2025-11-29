@@ -12,9 +12,7 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 export async function POST(request: NextRequest) {
   try {
-    console.log("Upload request received");
     const session = await getServerAuthSessionFromRequest(request);
-    console.log("Session:", session ? "authenticated" : "not authenticated");
 
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -230,7 +228,6 @@ export async function POST(request: NextRequest) {
       let storageSuccess = false;
       
       try {
-        console.log("Uploading file to Supabase storage...");
         const { data: uploadData, error: uploadError } =
           await supabaseAdmin.storage
             .from("documents")
@@ -249,7 +246,6 @@ export async function POST(request: NextRequest) {
             console.warn(`Storage upload failed: ${uploadError.message}`);
           }
         } else if (uploadData) {
-          console.log("File uploaded to storage successfully");
           storageSuccess = true;
         }
 
@@ -283,13 +279,10 @@ export async function POST(request: NextRequest) {
       }
 
       // Process PDF: extract text and chunk
-      console.log(`Processing PDF: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
       let chunks: Array<{ text: string; metadata: any }>;
       
       try {
-        console.log('Initializing PDF processing...');
         chunks = await processPDF(buffer, file.name);
-        console.log(`PDF processed into ${chunks.length} chunks`);
         
         if (!chunks || chunks.length === 0) {
           throw new Error("No text could be extracted from the PDF. The file might be empty, corrupted, or contain only images.");
@@ -308,7 +301,6 @@ export async function POST(request: NextRequest) {
 
         // Check total text length
         const totalTextLength = chunks.reduce((sum, chunk) => sum + chunk.text.length, 0);
-        console.log(`Total extracted text: ${totalTextLength} characters`);
         
         if (totalTextLength < 100) {
           console.warn("Very little text extracted from PDF. This might affect the quality of the RAG system.");
@@ -360,7 +352,6 @@ export async function POST(request: NextRequest) {
       }
 
       // Generate embeddings
-      console.log("Generating embeddings for chunks...");
       const chunkTexts = chunks.map((chunk) => chunk.text.trim());
       let embeddings: number[][];
       
@@ -382,7 +373,6 @@ export async function POST(request: NextRequest) {
         }
 
         embeddings = await generateEmbeddings(chunkTexts, apiKey);
-        console.log(`Generated ${embeddings.length} embeddings`);
         
         if (!embeddings || embeddings.length === 0) {
           throw new Error("No embeddings were generated");
@@ -442,7 +432,6 @@ export async function POST(request: NextRequest) {
       }
 
       // Store vectors in database using safe parameterized queries
-      console.log("Storing vectors in database...");
       let vectorsInserted = 0;
       
       for (let i = 0; i < chunks.length; i++) {
@@ -457,8 +446,6 @@ export async function POST(request: NextRequest) {
         const metadata = chunks[i]?.metadata ?? {};
         
         try {
-          console.log(`[Vector ${i + 1}/${chunks.length}] Inserting chunk...`);
-          
           // Use parameterized query for pgvector compatibility and security
           const embeddingVector = `[${embedding.join(",")}]`;
           const metadataJson = JSON.stringify(metadata);
@@ -496,8 +483,6 @@ export async function POST(request: NextRequest) {
                 metadata: metadata
               });
           }
-          
-          console.log(`[Vector ${i + 1}] Success`);
           vectorsInserted++;
         } catch (sqlError) {
           console.error(`[Vector ${i + 1}] Database error:`, sqlError);

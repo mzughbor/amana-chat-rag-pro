@@ -4,8 +4,9 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
-import Button from "~/components/ui/Button";
-import Modal from "~/components/ui/Modal";
+import Button from "~/components/common/Button";
+import Modal from "~/components/common/Modal";
+import { ChatBubbleIcon } from "~/components/icons/ChatBubbleIcon";
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -27,20 +28,8 @@ export default function Navbar() {
         <div className="mx-auto max-w-[1200px] px-6 md:px-8">
           <div className="flex h-16 items-center justify-between">
             {/* Left: Logo */}
-            <Link href={session ? "/dashboard" : "/"} className="flex items-center gap-2 hover:opacity-80 transition-opacity duration-300">
-              <svg
-                className="w-8 h-8 text-purple-600"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                />
-              </svg>
+            <Link href={session ? "/dashboard" : "/"} className="flex items-center gap-2 hover:opacity-80 transition-opacity duration-300 text-purple-600">
+              <ChatBubbleIcon className="w-8 h-8" />
               <span className="text-xl font-bold text-slate-900">AmanaRAG</span>
             </Link>
 

@@ -1,3 +1,4 @@
+import "./env";
 import { createClient } from "@supabase/supabase-js";
 
 // Lazy initialization of Supabase clients

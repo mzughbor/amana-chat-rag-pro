@@ -15,7 +15,7 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: ["var(--font-sans)", "Inter", "sans-serif"],
+        sans: ["var(--font-sans)", "Poppins", "Inter", "sans-serif"],
       },
       container: {
         center: true,

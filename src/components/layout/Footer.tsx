@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import Button from "~/components/ui/Button";
+import Button from "~/components/common/Button";
+import { ChatBubbleIcon } from "~/components/icons/ChatBubbleIcon";
 
 export default function Footer() {
   const { data: session } = useSession();
@@ -13,20 +14,8 @@ export default function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {/* Left: Logo + Description */}
           <div>
-            <div className="flex items-center gap-2 mb-4">
-              <svg
-                className="w-6 h-6 text-purple-600"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                />
-              </svg>
+            <div className="flex items-center gap-2 mb-4 text-purple-600">
+              <ChatBubbleIcon className="w-6 h-6" />
               <span className="text-lg font-bold text-slate-900">AmanaRAG</span>
             </div>
             <p className="text-sm text-slate-600 leading-relaxed">

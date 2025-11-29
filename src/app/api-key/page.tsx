@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import Button from "~/components/ui/Button";
-import Input from "~/components/ui/Input";
-import Card from "~/components/ui/Card";
+import Button from "~/components/common/Button";
+import Input from "~/components/common/Input";
+import Card from "~/components/common/Card";
 
 export default function ApiKeyPage() {
   const { data: session } = useSession();

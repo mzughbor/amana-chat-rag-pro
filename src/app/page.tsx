@@ -1,8 +1,8 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import Card from "~/components/ui/Card";
-import Button from "~/components/ui/Button";
+import Card from "~/components/common/Card";
+import Button from "~/components/common/Button";
 
 export default async function HomePage() {
   const cookieStore = await cookies();

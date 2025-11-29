@@ -1,14 +1,11 @@
 import "~/styles/globals.css";
 import type React from "react";
-import { Inter } from "next/font/google";
 import { Providers } from "./providers";
-import Navbar from "~/components/layout/Navbar";
-import Footer from "~/components/layout/Footer";
+import dynamic from "next/dynamic";
+import { appFont } from "~/styles/fonts";
 
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-sans",
-});
+const Navbar = dynamic(() => import("~/components/layout/Navbar"), { ssr: false });
+const Footer = dynamic(() => import("~/components/layout/Footer"), { ssr: false });
 
 export const metadata = {
   title: "AmanaRAG",
@@ -22,8 +19,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <html lang="en">
-      <body className={`font-sans ${inter.variable} min-h-screen flex flex-col bg-gray-50`}>
+    <html lang="en" className={appFont.variable}>
+      <body className="font-sans min-h-screen flex flex-col bg-gray-50 antialiased">
         <Providers>
           <Navbar />
           <main className="flex-1">
@@ -37,4 +34,3 @@ export default function RootLayout({
     </html>
   );
 }
-

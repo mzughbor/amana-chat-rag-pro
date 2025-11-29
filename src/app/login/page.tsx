@@ -4,9 +4,9 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { signIn, useSession } from "next-auth/react";
 import Link from "next/link";
-import Button from "~/components/ui/Button";
-import Input from "~/components/ui/Input";
-import Card from "~/components/ui/Card";
+import Button from "~/components/common/Button";
+import Input from "~/components/common/Input";
+import Card from "~/components/common/Card";
 
 export default function LoginPage() {
   const router = useRouter();

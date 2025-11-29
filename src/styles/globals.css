@@ -3,8 +3,26 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    font-size: 18px;
+  }
+
   body {
-    @apply bg-gray-50 text-slate-900;
+    @apply bg-gray-50 text-slate-900 leading-relaxed;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply text-slate-950 font-semibold tracking-tight;
+  }
+
+  strong,
+  b {
+    @apply text-slate-950 font-semibold;
   }
   
   * {
