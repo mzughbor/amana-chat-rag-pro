@@ -25,22 +25,47 @@ declare module "next-auth" {
 declare module "next-auth/jwt" {
   interface JWT extends DefaultJWT {
     id: string;
+    email?: string;
   }
 }
 
 export const authOptions: NextAuthOptions = {
   callbacks: {
-    session: ({ session, token }) => {
-      if (session.user) {
-        session.user.id = token.id;
-      }
-      return session;
-    },
-    jwt: ({ token, user }) => {
+    async jwt({ token, user }) {
+      // When user signs in, add user data to token
       if (user) {
         token.id = user.id;
+        token.email = user.email || undefined;
+        
+        // Log for debugging in production
+        if (process.env.NODE_ENV === "production") {
+          console.log(`[NextAuth JWT] User signed in - token.id: ${token.id}, token.email: ${token.email}`);
+        }
       }
+      
+      // Log token contents in production for debugging
+      if (process.env.NODE_ENV === "production") {
+        console.log(`[NextAuth JWT] Token contents - id: ${token.id}, email: ${token.email || "missing"}`);
+      }
+      
       return token;
+    },
+    async session({ session, token }) {
+      // Add token data to session
+      if (session.user) {
+        session.user.id = token.id;
+        // Ensure email is set from token if not already in session
+        if (token.email) {
+          session.user.email = token.email;
+        }
+      }
+      
+      // Log session contents in production for debugging
+      if (process.env.NODE_ENV === "production") {
+        console.log(`[NextAuth Session] Session contents - user.id: ${session.user?.id}, user.email: ${session.user?.email || "missing"}`);
+      }
+      
+      return session;
     },
   },
   adapter: PrismaAdapter(db),
@@ -161,17 +186,29 @@ export const authOptions: NextAuthOptions = {
               }
             }
 
+            // Log user data for debugging in production
+            if (process.env.NODE_ENV === "production") {
+              console.log(`[NextAuth authorize] Returning user - id: ${user.id}, email: ${user.email}`);
+            }
+            
             return user;
           } catch (restError: any) {
             console.error("Error with REST API user management:", restError.message);
             // Even if database sync fails, we can still authenticate the user
             // using the data from Supabase Auth
-            return {
+            const fallbackUser = {
               id: data.user.id,
               email: data.user.email,
               name: data.user.user_metadata?.name ?? null,
               image: data.user.user_metadata?.avatar_url ?? null,
             };
+            
+            // Log fallback user for debugging in production
+            if (process.env.NODE_ENV === "production") {
+              console.log(`[NextAuth authorize] Returning fallback user - id: ${fallbackUser.id}, email: ${fallbackUser.email}`);
+            }
+            
+            return fallbackUser;
           }
         } catch (error: any) {
           console.error("Authentication error:", error.message);
@@ -198,75 +235,58 @@ export const authOptions: NextAuthOptions = {
 /**
  * Get server session in App Router (for server components)
  * Use this in server components and server actions
+ * This uses getServerSession which properly applies callbacks
  */
 export async function getServerAuthSession(): Promise<Session | null> {
   try {
-    // Use REST API approach since we know it works
-    const cookieStore = await cookies();
+    // Use getServerSession which properly applies jwt and session callbacks
+    const session = await getServerSession(authOptions);
     
-    // Get session token from cookies
-    const sessionToken = cookieStore.get("next-auth.session-token")?.value ||
-                         cookieStore.get("__Secure-next-auth.session-token")?.value;
-
     // Log for debugging in production
     if (process.env.NODE_ENV === "production") {
-      console.log(`[getServerAuthSession] Session token exists: ${!!sessionToken}`);
-      const allCookies = cookieStore.getAll();
-      console.log(`[getServerAuthSession] Total cookies: ${allCookies.length}`);
+      console.log(`[getServerAuthSession] Session exists: ${!!session}`);
+      if (session) {
+        console.log(`[getServerAuthSession] Session user - id: ${session.user?.id}, email: ${session.user?.email || "missing"}`);
+      } else {
+        // If session is null, try to get token to see what's wrong
+        const cookieStore = await cookies();
+        const sessionToken = cookieStore.get("next-auth.session-token")?.value ||
+                             cookieStore.get("__Secure-next-auth.session-token")?.value;
+        console.log(`[getServerAuthSession] Session token exists: ${!!sessionToken}`);
+        
+        if (sessionToken) {
+          // Try to decode token to see what's in it
+          try {
+            const token = await getToken({
+              req: {
+                headers: {},
+                cookies: {
+                  "next-auth.session-token": sessionToken,
+                },
+              } as any,
+              secret: process.env.NEXTAUTH_SECRET,
+            });
+            console.log(`[getServerAuthSession] Token contents - id: ${token?.id}, email: ${token?.email || "missing"}`);
+          } catch (tokenError) {
+            console.error(`[getServerAuthSession] Error decoding token:`, tokenError);
+          }
+        }
+      }
     }
 
-    if (!sessionToken) {
+    if (!session || !session.user) {
+      return null;
+    }
+
+    // Ensure email is present in session
+    if (!session.user.email) {
       if (process.env.NODE_ENV === "production") {
-        console.log(`[getServerAuthSession] No session token found`);
+        console.error(`[getServerAuthSession] Session exists but user.email is missing`);
       }
       return null;
     }
 
-    // Decode and verify the JWT token
-    const token = await getToken({
-      req: {
-        headers: {},
-        cookies: {
-          "next-auth.session-token": sessionToken,
-        },
-      } as any,
-      secret: process.env.NEXTAUTH_SECRET,
-    });
-
-    if (!token || !token.email) {
-      if (process.env.NODE_ENV === "production") {
-        console.log(`[getServerAuthSession] Token invalid or missing email`);
-      }
-      return null;
-    }
-
-    // Get user from database via REST API
-    const { data: userData, error: userError } = await supabaseRestClient
-      .from('users')
-      .select('*')
-      .eq('email', token.email)
-      .single();
-
-    if (userError || !userData) {
-      if (process.env.NODE_ENV === "production") {
-        console.log(`[getServerAuthSession] User fetch error: ${userError?.message || "No user data"}`);
-      }
-      return null;
-    }
-
-    if (process.env.NODE_ENV === "production") {
-      console.log(`[getServerAuthSession] Session created successfully for user: ${userData.email}`);
-    }
-
-    return {
-      user: {
-        id: userData.id,
-        email: userData.email,
-        name: userData.name,
-        image: userData.image,
-      },
-      expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-    } as Session;
+    return session;
   } catch (error) {
     console.error("[getServerAuthSession] Error getting server session:", error);
     if (process.env.NODE_ENV === "production") {
