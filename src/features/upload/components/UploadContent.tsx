@@ -51,22 +51,40 @@ export default function UploadContent({
 }) {
   // Normalize initial values to ensure SSR/CSR consistency
   const normalizedInitialBotId = initialBotId || bots[0]?.id || "";
-  const normalizedInitialDocuments = initialDocuments.map(doc => ({
-    ...doc,
-    createdAt: typeof doc.createdAt === 'string' 
-      ? doc.createdAt 
-      : doc.createdAt instanceof Date 
-        ? doc.createdAt.toISOString() 
-        : new Date(doc.createdAt).toISOString(),
-  }));
-  const normalizedInitialQaPairs = initialQaPairs.map(qa => ({
-    ...qa,
-    createdAt: typeof qa.createdAt === 'string' 
-      ? qa.createdAt 
-      : qa.createdAt instanceof Date 
-        ? qa.createdAt.toISOString() 
-        : new Date(qa.createdAt).toISOString(),
-  }));
+  const normalizedInitialDocuments = initialDocuments.map(doc => {
+    // Handle createdAt conversion safely
+    let createdAtString: string;
+    const createdAtValue = (doc as any).createdAt;
+    if (typeof createdAtValue === 'string') {
+      createdAtString = createdAtValue;
+    } else if (createdAtValue instanceof Date) {
+      createdAtString = createdAtValue.toISOString();
+    } else {
+      createdAtString = new Date(createdAtValue).toISOString();
+    }
+    
+    return {
+      ...doc,
+      createdAt: createdAtString,
+    };
+  });
+  const normalizedInitialQaPairs = initialQaPairs.map(qa => {
+    // Handle createdAt conversion safely
+    let createdAtString: string;
+    const createdAtValue = (qa as any).createdAt;
+    if (typeof createdAtValue === 'string') {
+      createdAtString = createdAtValue;
+    } else if (createdAtValue instanceof Date) {
+      createdAtString = createdAtValue.toISOString();
+    } else {
+      createdAtString = new Date(createdAtValue).toISOString();
+    }
+    
+    return {
+      ...qa,
+      createdAt: createdAtString,
+    };
+  });
   
   const [botId, setBotId] = useState(normalizedInitialBotId);
   const [documents, setDocuments] = useState(normalizedInitialDocuments);
