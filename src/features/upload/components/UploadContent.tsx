@@ -754,11 +754,15 @@ export default function UploadContent({
                       )}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                      {typeof doc.createdAt === 'string' 
-                        ? new Date(doc.createdAt).toLocaleDateString() 
-                        : doc.createdAt instanceof Date 
-                          ? doc.createdAt.toLocaleDateString() 
-                          : String(doc.createdAt)}
+                      {(() => {
+                        const createdAtValue = doc.createdAt;
+                        if (typeof createdAtValue === 'string') {
+                          return new Date(createdAtValue).toLocaleDateString();
+                        } else {
+                          // Fallback for any unexpected types
+                          return String(createdAtValue);
+                        }
+                      })()}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
                       <button
