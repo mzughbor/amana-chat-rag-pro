@@ -43,13 +43,13 @@ export default function UploadContent({
   sites,
   bots,
 }: {
-  botId: string;
+  botId?: string;
   documents: Document[];
   qaPairs: QAPair[];
   sites: Site[];
   bots: Bot[];
 }) {
-  const [botId, setBotId] = useState(initialBotId);
+  const [botId, setBotId] = useState(initialBotId || bots[0]?.id || "");
   const [documents, setDocuments] = useState(initialDocuments);
   const [qaPairs, setQaPairs] = useState(initialQaPairs);
   const [uploading, setUploading] = useState(false);
@@ -75,6 +75,8 @@ export default function UploadContent({
 
   // Fetch data when bot selection changes
   const fetchBotData = async (targetBotId: string) => {
+    if (!targetBotId) return;
+    
     try {
       // Reload page to fetch fresh data for the selected bot
       // This ensures we get the latest documents and Q&A pairs from the server
@@ -121,6 +123,13 @@ export default function UploadContent({
     setUploadError("");
     setUploading(true);
     setUploadProgress("Uploading file...");
+
+    if (!botId) {
+      setUploadError("Please select a bot first");
+      setSelectedFileName("");
+      setUploading(false);
+      return;
+    }
 
     const formData = new FormData();
     formData.append("file", file);
@@ -201,6 +210,14 @@ export default function UploadContent({
 
   const handleEditQaSubmit = async (e: React.FormEvent, qaId: string) => {
     e.preventDefault();
+    
+    if (!botId) {
+      setToastMessage("Please select a bot first");
+      setToastType("error");
+      setToastVisible(true);
+      return;
+    }
+    
     setQaSubmitting(true);
 
     try {
@@ -243,7 +260,7 @@ export default function UploadContent({
   };
 
   const handleDeleteQaConfirm = async () => {
-    if (!qaToDelete) return;
+    if (!qaToDelete || !botId) return;
 
     setDeletingQaId(qaToDelete);
     setShowDeleteQaModal(false);
@@ -344,6 +361,14 @@ export default function UploadContent({
 
   const handleQASubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!botId) {
+      setToastMessage("Please select a bot first");
+      setToastType("error");
+      setToastVisible(true);
+      return;
+    }
+    
     setQaSubmitting(true);
 
     try {
@@ -409,7 +434,7 @@ export default function UploadContent({
         </div>
 
         {/* Bot Selection Dropdown */}
-        {bots.length > 0 && (
+        {bots.length > 0 ? (
           <Card className="mb-6 animate-fade-in">
             <div className="space-y-2">
               <label htmlFor="bot-select" className="block text-sm font-medium text-gray-700">
@@ -440,8 +465,26 @@ export default function UploadContent({
               )}
             </div>
           </Card>
+        ) : (
+          <Card className="mb-6 animate-fade-in bg-yellow-50 border-yellow-200">
+            <div className="p-6 text-center">
+              <svg className="mx-auto h-12 w-12 text-yellow-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <h3 className="text-lg font-semibold text-yellow-900 mb-2">No Bots Found</h3>
+              <p className="text-yellow-800 mb-4">
+                You need to create a bot before you can upload content. Please create a bot from the dashboard first.
+              </p>
+              <Link href="/dashboard">
+                <Button variant="primary">
+                  Go to Dashboard
+                </Button>
+              </Link>
+            </div>
+          </Card>
         )}
 
+        {bots.length > 0 && botId && (
         <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-2">
           {/* PDF Upload */}
           <div className="rounded-lg bg-white p-6 shadow">
@@ -684,8 +727,10 @@ export default function UploadContent({
             </table>
           </div>
         </div>
+        )}
 
         {/* Q&A Pairs List */}
+        {bots.length > 0 && botId && (
         <div className="mt-8">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900">Q&A Pairs</h2>
@@ -806,6 +851,7 @@ export default function UploadContent({
             )}
           </div>
         </div>
+        )}
 
         {/* Delete Document Confirmation Modal */}
         <Modal

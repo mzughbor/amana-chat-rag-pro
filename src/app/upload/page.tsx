@@ -98,39 +98,42 @@ export default async function UploadPage({ searchParams }: UploadPageProps) {
     }
   }
 
-  // If no bots exist, redirect to dashboard to create one
-  if (botsData.length === 0) {
-    redirect("/dashboard");
-  }
-
-  // Use botId from query params if provided, otherwise use the first bot
-  let defaultBotId = botsData[0].id;
-  if (searchParams.botId) {
+  // If no bots exist, allow user to stay on page but show empty state
+  // The UploadContent component will handle showing a message or allowing bot creation
+  let defaultBotId: string | null = null;
+  
+  if (botsData.length > 0) {
+    // Use botId from query params if provided, otherwise use the first bot
+    defaultBotId = botsData[0].id;
+  if (searchParams.botId && botsData.length > 0) {
     // Validate that the botId exists and belongs to the user
     const requestedBot = botsData.find(bot => bot.id === searchParams.botId);
     if (requestedBot) {
       defaultBotId = searchParams.botId;
     } else {
       console.warn(`Bot ID ${searchParams.botId} not found or doesn't belong to user, using default bot`);
+      defaultBotId = botsData[0]?.id || null;
     }
   }
   
   // Fetch documents for the default bot - use raw SQL to handle both old and new schema
   let documents: any[] = [];
-  try {
-    // Try new schema first (botId, fileName, ingestionStatus)
-    const newDocs = await db.$queryRaw<any[]>`
-      SELECT 
-        id,
-        "fileName" as filename,
-        "ingestionStatus" as status,
-        "errorMessage",
-        "createdAt"
-      FROM documents
-      WHERE "botId" = ${defaultBotId}
-      ORDER BY "createdAt" DESC
-    `;
-    documents = newDocs;
+  
+  if (defaultBotId) {
+    try {
+      // Try new schema first (botId, fileName, ingestionStatus)
+      const newDocs = await db.$queryRaw<any[]>`
+        SELECT 
+          id,
+          "fileName" as filename,
+          "ingestionStatus" as status,
+          "errorMessage",
+          "createdAt"
+        FROM documents
+        WHERE "botId" = ${defaultBotId}
+        ORDER BY "createdAt" DESC
+      `;
+      documents = newDocs;
   } catch (error: any) {
     console.warn("New schema query failed, trying fallback:", error.message);
     // Fallback: try with COALESCE for backward compatibility
@@ -165,34 +168,39 @@ export default async function UploadPage({ searchParams }: UploadPageProps) {
 
   // Fetch QAPairs for the default bot - use raw SQL to handle both old and new schema
   let qaPairs: any[] = [];
-  try {
-    // Try new schema first (botId)
-    const newQAs = await db.$queryRaw<any[]>`
-      SELECT id, question, answer, "createdAt"
-      FROM qa_pairs
-      WHERE "botId" = ${defaultBotId}
-      ORDER BY "createdAt" DESC
-    `;
-    qaPairs = newQAs;
-  } catch (error: any) {
-    // Fallback to old schema (siteId)
+  
+  if (defaultBotId) {
     try {
-      const siteId = botsData[0].siteId;
-      const oldQAs = await db.$queryRaw<any[]>`
+      // Try new schema first (botId)
+      const newQAs = await db.$queryRaw<any[]>`
         SELECT id, question, answer, "createdAt"
         FROM qa_pairs
-        WHERE "siteId" = ${siteId}
+        WHERE "botId" = ${defaultBotId}
         ORDER BY "createdAt" DESC
       `;
-      qaPairs = oldQAs;
-    } catch (fallbackError) {
-      console.error("Error fetching QAPairs:", fallbackError);
-      qaPairs = [];
+      qaPairs = newQAs;
+    } catch (error: any) {
+      // Fallback to old schema (siteId)
+      try {
+        const siteId = botsData[0]?.siteId;
+        if (siteId) {
+          const oldQAs = await db.$queryRaw<any[]>`
+            SELECT id, question, answer, "createdAt"
+            FROM qa_pairs
+            WHERE "siteId" = ${siteId}
+            ORDER BY "createdAt" DESC
+          `;
+          qaPairs = oldQAs;
+        }
+      } catch (fallbackError) {
+        console.error("Error fetching QAPairs:", fallbackError);
+        qaPairs = [];
+      }
     }
   }
 
   return <UploadContent 
-    botId={defaultBotId} 
+    botId={defaultBotId || undefined} 
     documents={documents} 
     qaPairs={qaPairs} 
     sites={sitesData}
