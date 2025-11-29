@@ -13,14 +13,14 @@ interface Document {
   filename: string;
   status: string;
   errorMessage: string | null;
-  createdAt: Date;
+  createdAt: string; // Changed to string to avoid hydration mismatch
 }
 
 interface QAPair {
   id: string;
   question: string;
   answer: string;
-  createdAt: Date;
+  createdAt: string; // Changed to string to avoid hydration mismatch
 }
 
 interface Bot {
@@ -49,9 +49,28 @@ export default function UploadContent({
   sites: Site[];
   bots: Bot[];
 }) {
-  const [botId, setBotId] = useState(initialBotId || bots[0]?.id || "");
-  const [documents, setDocuments] = useState(initialDocuments);
-  const [qaPairs, setQaPairs] = useState(initialQaPairs);
+  // Normalize initial values to ensure SSR/CSR consistency
+  const normalizedInitialBotId = initialBotId || bots[0]?.id || "";
+  const normalizedInitialDocuments = initialDocuments.map(doc => ({
+    ...doc,
+    createdAt: typeof doc.createdAt === 'string' 
+      ? doc.createdAt 
+      : doc.createdAt instanceof Date 
+        ? doc.createdAt.toISOString() 
+        : new Date(doc.createdAt).toISOString(),
+  }));
+  const normalizedInitialQaPairs = initialQaPairs.map(qa => ({
+    ...qa,
+    createdAt: typeof qa.createdAt === 'string' 
+      ? qa.createdAt 
+      : qa.createdAt instanceof Date 
+        ? qa.createdAt.toISOString() 
+        : new Date(qa.createdAt).toISOString(),
+  }));
+  
+  const [botId, setBotId] = useState(normalizedInitialBotId);
+  const [documents, setDocuments] = useState(normalizedInitialDocuments);
+  const [qaPairs, setQaPairs] = useState(normalizedInitialQaPairs);
   
   // Log hydration success in production
   useEffect(() => {
@@ -717,7 +736,11 @@ export default function UploadContent({
                       )}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                      {new Date(doc.createdAt).toLocaleDateString()}
+                      {typeof doc.createdAt === 'string' 
+                        ? new Date(doc.createdAt).toLocaleDateString() 
+                        : doc.createdAt instanceof Date 
+                          ? doc.createdAt.toLocaleDateString() 
+                          : String(doc.createdAt)}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
                       <button

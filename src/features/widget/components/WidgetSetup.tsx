@@ -652,7 +652,7 @@ export default function WidgetSetup() {
 
             <div className="h-80 overflow-y-auto p-4 space-y-4 bg-gray-50">
               {testMessages.map((msg, idx) => (
-                <div key={`${msg.timestamp.getTime()}-${idx}`} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                <div key={`${msg.timestamp instanceof Date ? msg.timestamp.getTime() : String(msg.timestamp)}-${idx}`} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                   <div
                     className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm shadow ${
                       msg.role === "user"

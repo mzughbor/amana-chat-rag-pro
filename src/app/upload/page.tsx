@@ -169,12 +169,17 @@ export default async function UploadPage({ searchParams }: UploadPageProps) {
   }
 
   // Transform to match expected interface
+  // Convert createdAt to ISO string to avoid hydration mismatch
   documents = documents.map((doc: any) => ({
     id: doc.id,
     filename: doc.filename || "Unknown",
     status: doc.status || "unknown",
     errorMessage: doc.errorMessage || null,
-    createdAt: doc.createdAt,
+    createdAt: doc.createdAt instanceof Date 
+      ? doc.createdAt.toISOString() 
+      : typeof doc.createdAt === 'string' 
+        ? doc.createdAt 
+        : new Date(doc.createdAt).toISOString(),
   }));
 
   // Fetch QAPairs for the default bot - use raw SQL to handle both old and new schema
@@ -189,7 +194,15 @@ export default async function UploadPage({ searchParams }: UploadPageProps) {
         WHERE "botId" = ${defaultBotId}
         ORDER BY "createdAt" DESC
       `;
-      qaPairs = newQAs;
+      // Convert createdAt to ISO string to avoid hydration mismatch
+      qaPairs = newQAs.map((qa: any) => ({
+        ...qa,
+        createdAt: qa.createdAt instanceof Date 
+          ? qa.createdAt.toISOString() 
+          : typeof qa.createdAt === 'string' 
+            ? qa.createdAt 
+            : new Date(qa.createdAt).toISOString(),
+      }));
     } catch (error: any) {
       // Fallback to old schema (siteId)
       try {
@@ -201,7 +214,15 @@ export default async function UploadPage({ searchParams }: UploadPageProps) {
             WHERE "siteId" = ${siteId}
             ORDER BY "createdAt" DESC
           `;
-          qaPairs = oldQAs;
+          // Convert createdAt to ISO string to avoid hydration mismatch
+          qaPairs = oldQAs.map((qa: any) => ({
+            ...qa,
+            createdAt: qa.createdAt instanceof Date 
+              ? qa.createdAt.toISOString() 
+              : typeof qa.createdAt === 'string' 
+                ? qa.createdAt 
+                : new Date(qa.createdAt).toISOString(),
+          }));
         }
       } catch (fallbackError) {
         console.error("Error fetching QAPairs:", fallbackError);
