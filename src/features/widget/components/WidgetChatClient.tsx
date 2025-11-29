@@ -22,6 +22,13 @@ export default function WidgetChatClient({ siteId }: { siteId: string }) {
   const [loading, setLoading] = useState(false);
   const [botInfo, setBotInfo] = useState<BotInfo | null>(null); // Add bot info state
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  // Log hydration success in production
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") {
+      console.log("[Hydration Debug] WidgetChatClient component mounted successfully");
+    }
+  }, []);
 
   // Fetch bot info
   useEffect(() => {
@@ -53,7 +60,7 @@ export default function WidgetChatClient({ siteId }: { siteId: string }) {
     const userMessage: Message = {
       role: "user",
       content: input,
-      timestamp: new Date(),
+      timestamp: new Date(), // This is fine as it's only used in client-side state
     };
 
     setMessages((prev) => [...prev, userMessage]);
@@ -81,7 +88,7 @@ export default function WidgetChatClient({ siteId }: { siteId: string }) {
       const assistantMessage: Message = {
         role: "assistant",
         content: data.response,
-        timestamp: new Date(),
+        timestamp: new Date(), // This is fine as it's only used in client-side state
       };
       
       setMessages((prev) => [...prev, assistantMessage]);
@@ -90,7 +97,7 @@ export default function WidgetChatClient({ siteId }: { siteId: string }) {
       const errorMessage: Message = {
         role: "assistant",
         content: "Sorry, I encountered an error. Please try again.",
-        timestamp: new Date(),
+        timestamp: new Date(), // This is fine as it's only used in client-side state
       };
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
@@ -117,8 +124,10 @@ export default function WidgetChatClient({ siteId }: { siteId: string }) {
           {/* Close button for widget */}
           <button 
             onClick={() => {
-              // Notify parent window to close the widget
-              window.parent.postMessage({ type: 'CLOSE_WIDGET' }, '*');
+              // Notify parent window to close the widget - only in browser context
+              if (typeof window !== "undefined" && window.parent) {
+                window.parent.postMessage({ type: 'CLOSE_WIDGET' }, '*');
+              }
             }}
             className="p-1 rounded-lg hover:bg-white/10 transition-colors"
             title="Close chat"
@@ -190,10 +199,13 @@ export default function WidgetChatClient({ siteId }: { siteId: string }) {
                 key={idx}
                 onClick={() => {
                   setInput(reply);
-                  setTimeout(() => {
-                    const form = document.querySelector('form');
-                    form?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
-                  }, 100);
+                  // Use setTimeout to ensure DOM is ready - only in browser context
+                  if (typeof document !== "undefined") {
+                    setTimeout(() => {
+                      const form = document.querySelector('form');
+                      form?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+                    }, 100);
+                  }
                 }}
                 className="px-2.5 py-1.5 rounded-full text-xs bg-gray-100 text-slate-700 hover:bg-gray-200 transition-colors border border-gray-200"
               >

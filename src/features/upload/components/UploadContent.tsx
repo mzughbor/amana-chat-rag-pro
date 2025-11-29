@@ -52,6 +52,13 @@ export default function UploadContent({
   const [botId, setBotId] = useState(initialBotId || bots[0]?.id || "");
   const [documents, setDocuments] = useState(initialDocuments);
   const [qaPairs, setQaPairs] = useState(initialQaPairs);
+  
+  // Log hydration success in production
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") {
+      console.log("[Hydration Debug] UploadContent component mounted successfully");
+    }
+  }, []);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [uploadProgress, setUploadProgress] = useState("");
@@ -77,15 +84,18 @@ export default function UploadContent({
   const fetchBotData = async (targetBotId: string) => {
     if (!targetBotId) return;
     
-    try {
-      // Reload page to fetch fresh data for the selected bot
-      // This ensures we get the latest documents and Q&A pairs from the server
-      window.location.href = `/upload?botId=${targetBotId}`;
-    } catch (error) {
-      console.error("Error fetching bot data:", error);
-      setToastMessage("Failed to load bot data");
-      setToastType("error");
-      setToastVisible(true);
+    // Use useEffect-safe navigation instead of direct window access
+    if (typeof window !== "undefined") {
+      try {
+        // Reload page to fetch fresh data for the selected bot
+        // This ensures we get the latest documents and Q&A pairs from the server
+        window.location.href = `/upload?botId=${targetBotId}`;
+      } catch (error) {
+        console.error("Error fetching bot data:", error);
+        setToastMessage("Failed to load bot data");
+        setToastType("error");
+        setToastVisible(true);
+      }
     }
   };
 
@@ -189,10 +199,12 @@ export default function UploadContent({
 
   const handleRemoveFile = () => {
     setSelectedFileName("");
-    // Clear the file input
-    const fileInput = document.getElementById("pdf-upload") as HTMLInputElement;
-    if (fileInput) {
-      fileInput.value = "";
+    // Clear the file input - only access document in browser
+    if (typeof document !== "undefined") {
+      const fileInput = document.getElementById("pdf-upload") as HTMLInputElement;
+      if (fileInput) {
+        fileInput.value = "";
+      }
     }
   }
 

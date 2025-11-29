@@ -62,6 +62,11 @@ export default function WidgetSetup() {
     setIsClient(true);
     if (typeof window !== "undefined") {
       setWidgetOrigin(window.location.origin);
+      
+      // Log hydration success in production
+      if (process.env.NODE_ENV === "production") {
+        console.log("[Hydration Debug] WidgetSetup component mounted successfully");
+      }
     }
   }, []);
   
@@ -192,8 +197,9 @@ export default function WidgetSetup() {
   };
 
   // Generate widget script with current settings
+  // Note: This script will be executed in browser, so document references are fine
   const widgetScript = useMemo(() => {
-    if (!selectedBotId || !widgetOrigin) return "";
+    if (!selectedBotId || !widgetOrigin || !isClient) return "";
     
     const params = new URLSearchParams({
       botId: selectedBotId,
@@ -210,7 +216,7 @@ export default function WidgetSetup() {
     document.head.appendChild(script);
   })();
 </script>`;
-  }, [selectedBotId, accentColor, cornerRadius, position, widgetOrigin]);
+  }, [selectedBotId, accentColor, cornerRadius, position, widgetOrigin, isClient]);
 
   const copyToClipboard = () => {
     if (!widgetScript) return;
@@ -227,17 +233,22 @@ export default function WidgetSetup() {
       return;
     }
 
-    const initialVisitorId =
-      typeof crypto !== "undefined" && "randomUUID" in crypto
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    // Generate visitor ID only in browser context to avoid hydration mismatch
+    let initialVisitorId = "";
+    if (typeof window !== "undefined") {
+      if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+        initialVisitorId = crypto.randomUUID();
+      } else {
+        initialVisitorId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      }
+    }
 
     setVisitorId(initialVisitorId);
     setTestMessages([
       {
         role: "assistant",
         content: welcomeMessage || "Hello! How can I help you today?",
-        timestamp: new Date(),
+        timestamp: new Date(), // This is fine as it's only used in client-side state
       },
     ]);
     setTestInput("");
@@ -262,7 +273,7 @@ export default function WidgetSetup() {
     const userMessage: TestMessage = {
       role: "user",
       content: testInput.trim(),
-      timestamp: new Date(),
+      timestamp: new Date(), // This is fine as it's only used in client-side state
     };
 
     setTestMessages((prev) => [...prev, userMessage]);
@@ -298,7 +309,7 @@ export default function WidgetSetup() {
         {
           role: "assistant",
           content: data.response || "No response received.",
-          timestamp: new Date(),
+          timestamp: new Date(), // This is fine as it's only used in client-side state
         },
       ]);
     } catch (error) {
@@ -311,7 +322,7 @@ export default function WidgetSetup() {
         {
           role: "assistant",
           content: "Sorry, I encountered an error. Please try again.",
-          timestamp: new Date(),
+          timestamp: new Date(), // This is fine as it's only used in client-side state
         },
       ]);
     } finally {
