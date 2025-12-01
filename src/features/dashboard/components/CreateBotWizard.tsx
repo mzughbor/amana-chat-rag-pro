@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
 import Modal from "~/components/common/Modal";
 import Button from "~/components/common/Button";
 import Input from "~/components/common/Input";
 import Toast from "~/components/common/Toast";
+import SignupModal from "~/components/common/SignupModal";
 
 const STORAGE_KEY = "amana-bot-wizard-draft";
 
@@ -26,6 +28,7 @@ export default function CreateBotWizard({
   onClose,
   onComplete,
 }: CreateBotWizardProps) {
+  const { data: session } = useSession();
   const [step, setStep] = useState(1);
   const [botName, setBotName] = useState("");
   const [siteName, setSiteName] = useState(""); // Add site name state
@@ -41,6 +44,7 @@ export default function CreateBotWizard({
   const [creatingSite, setCreatingSite] = useState(false);
   const [apiKeyValidated, setApiKeyValidated] = useState(false);
   const [apiKeyError, setApiKeyError] = useState("");
+  const [showSignupModal, setShowSignupModal] = useState(false);
 
   // Load saved draft from localStorage when modal opens
   useEffect(() => {
@@ -110,6 +114,10 @@ export default function CreateBotWizard({
     setError("");
 
     try {
+      // Get guestId if user is not authenticated (for guest bot creation)
+      const { getOrCreateGuestId } = await import("~/lib/guestBot");
+      const guestId = typeof window !== "undefined" ? getOrCreateGuestId() : null;
+
       // Create site and bot in one request
       const response = await fetch("/api/bots", {
         method: "POST",
@@ -120,6 +128,7 @@ export default function CreateBotWizard({
           siteName: siteName, // Use site name
           botName: botName,
           welcomeMessage: welcomeMessage,
+          guestId: guestId, // Include guestId for guest bot creation
         }),
       });
 
@@ -155,6 +164,14 @@ export default function CreateBotWizard({
         welcomeMessage: data.welcomeMessage || welcomeMessage,
         createdAt: data.createdAt,
       };
+
+      // Check if this is a guest bot and user is not authenticated
+      if (data.isGuest && !session?.user) {
+        // Show signup modal instead of completing
+        setShowSignupModal(true);
+        setCreatingSite(false);
+        return;
+      }
 
       // Call onComplete callback with newly created bot
       onComplete(newBot);
@@ -454,8 +471,20 @@ export default function CreateBotWizard({
         isVisible={toastVisible}
         onClose={() => setToastVisible(false)}
       />
-      
-      {/* Success Modal */}
+      <SignupModal
+        isOpen={showSignupModal}
+        onClose={() => {
+          setShowSignupModal(false);
+          // After signup, refresh to get migrated bots
+          if (session?.user) {
+            window.location.reload();
+          }
+        }}
+        onSignupSuccess={() => {
+          // Refresh session and complete bot creation
+          window.location.reload();
+        }}
+      />
     </Modal>
   );
 }

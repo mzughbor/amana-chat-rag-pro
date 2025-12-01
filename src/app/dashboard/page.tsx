@@ -10,6 +10,8 @@ import Modal from "~/components/common/Modal";
 import Toast from "~/components/common/Toast";
 import CreateBotWizard from "~/features/dashboard/components/CreateBotWizard";
 import BotSettingsModal from "~/features/dashboard/components/BotSettingsModal";
+import SignupModal from "~/components/common/SignupModal";
+import { getOrCreateGuestId, isGuestBot } from "~/lib/guestBot";
 
 interface Bot {
   id: string;
@@ -36,43 +38,76 @@ export default function DashboardPage() {
   const [createdBot, setCreatedBot] = useState<Bot | null>(null);
   const [metrics, setMetrics] = useState({ documents: 0, messages: 0 });
   const [metricsLoading, setMetricsLoading] = useState(true);
+  const [showSignupModal, setShowSignupModal] = useState(false);
 
   const fetchUserSites = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch("/api/bots", {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
+      
+      // If authenticated, fetch user bots
+      if (session?.user?.id) {
+        const response = await fetch("/api/bots", {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Failed to fetch bots: ${response.status} ${response.statusText}`);
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `Failed to fetch bots: ${response.status} ${response.statusText}`);
+        }
+
+        const botsData = await response.json();
+        const botsArray = Array.isArray(botsData) ? botsData : [];
+
+        const transformedBots = botsArray
+          .filter((bot: any) => bot && bot.id)
+          .map((bot: any) => ({
+            id: bot.id,
+            name: bot.name || "Unnamed Bot",
+            welcomeMessage: bot.welcomeMessage || "Hello! How can I help you today?",
+            createdAt: bot.createdAt || new Date().toISOString(),
+            isGuest: bot.isGuest || false,
+          }));
+
+        setBots(transformedBots);
+      } else {
+        // If guest, fetch guest bots
+        const guestId = getOrCreateGuestId();
+        const response = await fetch(`/api/bots/guest?guestId=${guestId}`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (response.ok) {
+          const botsData = await response.json();
+          const botsArray = Array.isArray(botsData) ? botsData : [];
+
+          const transformedBots = botsArray
+            .filter((bot: any) => bot && bot.id)
+            .map((bot: any) => ({
+              id: bot.id,
+              name: bot.name || "Unnamed Bot",
+              welcomeMessage: bot.welcomeMessage || "Hello! How can I help you today?",
+              createdAt: bot.createdAt || new Date().toISOString(),
+              isGuest: true,
+            }));
+
+          setBots(transformedBots);
+        } else {
+          setBots([]);
+        }
       }
-
-      const botsData = await response.json();
-
-      const botsArray = Array.isArray(botsData) ? botsData : [];
-
-      const transformedBots = botsArray
-        .filter((bot: any) => bot && bot.id)
-        .map((bot: any) => ({
-          id: bot.id,
-          name: bot.name || "Unnamed Bot",
-          welcomeMessage: bot.welcomeMessage || "Hello! How can I help you today?",
-          createdAt: bot.createdAt || new Date().toISOString(),
-        }));
-
-      setBots(transformedBots);
     } catch (error) {
       console.error("Error fetching bots:", error);
       setBots([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [session]);
 
   const fetchMetrics = useCallback(async () => {
     try {
@@ -95,16 +130,16 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/login");
-      return;
-    }
-
+    // Allow both authenticated and guest users to access dashboard
     if (status === "authenticated") {
       fetchUserSites();
       fetchMetrics();
+    } else if (status === "unauthenticated") {
+      // Guest user - fetch guest bots
+      fetchUserSites();
+      // Don't fetch metrics for guests
     }
-  }, [status, router, fetchUserSites, fetchMetrics]);
+  }, [status, fetchUserSites, fetchMetrics]);
 
   const handleDeleteBot = async () => {
     if (!botToDelete) return;
@@ -140,6 +175,16 @@ export default function DashboardPage() {
   };
 
   const handleDeleteClick = (bot: Bot) => {
+    // Check if guest bot and user not authenticated
+    if ((bot as any).isGuest && !session?.user) {
+      setShowSignupModal(true);
+      return;
+    }
+    // Check if user is not authenticated
+    if (!session?.user) {
+      setShowSignupModal(true);
+      return;
+    }
     setBotToDelete(bot);
     setShowDeleteConfirm(true);
   };
@@ -193,17 +238,15 @@ export default function DashboardPage() {
     );
   }
 
-  if (!session) {
-    return null;
-  }
-
   return (
     <div className="py-8">
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-5xl font-bold text-slate-900 mb-3">Dashboard</h1>
           <p className="text-xl text-slate-700">
-            Welcome back, {session.user?.name || session.user?.email?.split("@")[0] || "User"}! Manage your bots.
+            {session?.user 
+              ? `Welcome back, ${session.user.name || session.user.email?.split("@")[0] || "User"}! Manage your bots.`
+              : "Create and manage your bots. Sign up to save them permanently."}
           </p>
         </div>
       </div>
@@ -267,6 +310,11 @@ export default function DashboardPage() {
                     size="sm"
                     className="flex-1"
                     onClick={() => {
+                      // Check if guest bot and user not authenticated
+                      if ((bot as any).isGuest && !session?.user) {
+                        setShowSignupModal(true);
+                        return;
+                      }
                       setSelectedBot(bot);
                       setShowBotSettings(true);
                     }}
@@ -348,6 +396,17 @@ export default function DashboardPage() {
           onSettingsUpdated={fetchUserSites}
         />
       )}
+
+      <SignupModal
+        isOpen={showSignupModal}
+        onClose={() => {
+          setShowSignupModal(false);
+        }}
+        onSignupSuccess={() => {
+          // Refresh to get migrated bots
+          window.location.reload();
+        }}
+      />
 
       <Modal
         isOpen={showSuccessModal}

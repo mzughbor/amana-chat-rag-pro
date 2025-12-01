@@ -1,9 +1,68 @@
 import { notFound } from "next/navigation";
 import Script from 'next/script';
+import { db } from "~/lib/db";
+import { supabaseRestClient } from "~/lib/supabaseRestClient";
 
-export default function WidgetChatPage({ params }: { params: { siteId: string } }) {
+export default async function WidgetChatPage({ params }: { params: { siteId: string } }) {
   // Validate contextId (can be either siteId or botId)
   if (!params.siteId) {
+    notFound();
+  }
+
+  const { siteId: contextId } = params;
+
+  // Validate that botId exists in database
+  let botExists = false;
+  try {
+    // Try to find bot by ID first
+    const bots: any[] = await db.$queryRaw`
+      SELECT b.id
+      FROM bots b
+      WHERE b.id = ${contextId}
+      LIMIT 1
+    `;
+
+    if (bots.length > 0) {
+      botExists = true;
+    } else {
+      // Try finding by siteId
+      const sites: any[] = await db.$queryRaw`
+        SELECT s.id
+        FROM sites s
+        WHERE s.id = ${contextId}
+        LIMIT 1
+      `;
+      botExists = sites.length > 0;
+    }
+  } catch (dbError: any) {
+    console.warn("Database query failed, falling back to REST API:", dbError.message);
+    try {
+      const { data: botData, error: botError } = await supabaseRestClient
+        .from("bots")
+        .select("id")
+        .eq("id", contextId)
+        .limit(1)
+        .single();
+
+      if (!botError && botData) {
+        botExists = true;
+      } else {
+        const { data: siteData, error: siteError } = await supabaseRestClient
+          .from("sites")
+          .select("id")
+          .eq("id", contextId)
+          .limit(1)
+          .single();
+
+        botExists = !siteError && !!siteData;
+      }
+    } catch (restError: any) {
+      console.error("REST API fallback also failed:", restError.message);
+    }
+  }
+
+  // If botId doesn't exist, return 404
+  if (!botExists) {
     notFound();
   }
 

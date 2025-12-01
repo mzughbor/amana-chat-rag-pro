@@ -122,21 +122,36 @@ export async function GET() {
 /**
  * POST /api/bots
  * Create a new site with its bot
+ * Supports both authenticated users and guest users
  */
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions);
-    
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const body = await request.json();
-    const { siteName, botName, welcomeMessage, apiKey, botId } = body;
+    const { siteName, botName, welcomeMessage, apiKey, botId, guestId } = body;
+
+    // Determine if this is a guest bot creation
+    const isGuest = !session?.user?.id;
+    const userId = session?.user?.id || guestId;
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: "Either authentication or guestId is required" },
+        { status: 401 },
+      );
+    }
 
     if (!siteName || !botName) {
       return NextResponse.json(
         { error: "Site name and bot name are required" },
+        { status: 400 },
+      );
+    }
+
+    // Validate guestId format if provided
+    if (isGuest && (!guestId || typeof guestId !== 'string')) {
+      return NextResponse.json(
+        { error: "Valid guestId is required for guest bot creation" },
         { status: 400 },
       );
     }
@@ -148,17 +163,24 @@ export async function POST(request: Request) {
       // Use provided botId or generate a new one
       const botIdToUse = botId || crypto.randomUUID();
       
-      // Create site
+      // Create site (use guestId as userId for guest bots)
       await db.$executeRaw`
         INSERT INTO sites (id, "userId", name, "createdAt", "updatedAt")
-        VALUES (${siteId}, ${session.user.id}, ${siteName}, NOW(), NOW())
+        VALUES (${siteId}, ${userId}, ${siteName}, NOW(), NOW())
       `;
       
-      // Create bot
-      await db.$executeRaw`
-        INSERT INTO bots (id, "siteId", name, "welcomeMessage", status, "widgetSettings", "createdAt", "updatedAt")
-        VALUES (${botIdToUse}, ${siteId}, ${botName}, ${welcomeMessage || null}, 'draft', '{}', NOW(), NOW())
-      `;
+      // Create bot with guest flags if applicable
+      if (isGuest) {
+        await db.$executeRaw`
+          INSERT INTO bots (id, "siteId", name, "welcomeMessage", status, "widgetSettings", "isGuest", "guestId", "createdAt", "updatedAt")
+          VALUES (${botIdToUse}, ${siteId}, ${botName}, ${welcomeMessage || null}, 'draft', '{}', true, ${guestId}, NOW(), NOW())
+        `;
+      } else {
+        await db.$executeRaw`
+          INSERT INTO bots (id, "siteId", name, "welcomeMessage", status, "widgetSettings", "isGuest", "guestId", "createdAt", "updatedAt")
+          VALUES (${botIdToUse}, ${siteId}, ${botName}, ${welcomeMessage || null}, 'draft', '{}', false, NULL, NOW(), NOW())
+        `;
+      }
       
       // Fetch the created bot
       const bots: any[] = await db.$queryRaw`
@@ -184,6 +206,8 @@ export async function POST(request: Request) {
           name: bot.name,
           welcomeMessage: bot.welcomeMessage,
           status: bot.status,
+          isGuest: isGuest,
+          guestId: isGuest ? guestId : null,
           createdAt: bot.createdAt,
           updatedAt: bot.updatedAt,
           site: {
@@ -203,12 +227,12 @@ export async function POST(request: Request) {
           throw new Error("Supabase REST client not initialized");
         }
         
-        // Create site via REST API
+        // Create site via REST API (use guestId as userId for guest bots)
         const { data: siteData, error: siteError } = await supabaseRestClient
           .from('sites')
           .insert([{
             id: crypto.randomUUID(),
-            userId: session.user.id,
+            userId: userId,
             name: siteName,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
@@ -221,18 +245,22 @@ export async function POST(request: Request) {
         // Create bot via REST API
         // Use provided botId or generate a new one
         const botIdToUse = botId || crypto.randomUUID();
+        const botInsertData: any = {
+          id: botIdToUse,
+          siteId: siteData.id,
+          name: botName,
+          welcomeMessage: welcomeMessage || null,
+          status: 'draft',
+          widgetSettings: '{}',
+          isGuest: isGuest,
+          guestId: isGuest ? guestId : null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        
         const { data: botData, error: botError } = await supabaseRestClient
           .from('bots')
-          .insert([{
-            id: botIdToUse,
-            siteId: siteData.id,
-            name: botName,
-            welcomeMessage: welcomeMessage || null,
-            status: 'draft',
-            widgetSettings: '{}',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          }])
+          .insert([botInsertData])
           .select()
           .single();
         
@@ -244,6 +272,8 @@ export async function POST(request: Request) {
           name: botData.name,
           welcomeMessage: botData.welcomeMessage,
           status: botData.status,
+          isGuest: isGuest,
+          guestId: isGuest ? guestId : null,
           createdAt: botData.createdAt,
           updatedAt: botData.updatedAt,
           site: {

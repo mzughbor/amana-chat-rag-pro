@@ -111,6 +111,8 @@ model Bot {
   status                String   @default("active") // draft, active, disabled
   widgetSettings        Json?    @default("{}") // { primaryColor, radius, etc. }
   scriptEmbedId         String?  @unique // Unique widget script ID
+  isGuest                Boolean  @default(false) // True if bot was created by guest user
+  guestId                String?  // Guest user ID (UUID) for guest bots
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
@@ -125,6 +127,8 @@ model Bot {
   @@index([siteId])
   @@index([status])
   @@index([scriptEmbedId])
+  @@index([isGuest])
+  @@index([guestId])
   @@map("bots")
 }
 

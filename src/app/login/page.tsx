@@ -28,6 +28,36 @@ export default function LoginPage() {
     }
   }, [session, status, router, searchParams]);
 
+  const migrateGuestBots = async () => {
+    // Get guestId from localStorage
+    const guestId = localStorage.getItem("amana_guest_id");
+    
+    if (!guestId) {
+      return; // No guest bots to migrate
+    }
+
+    try {
+      const response = await fetch("/api/bots/migrate-guest", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ guestId }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        // Clear guest ID after successful migration
+        localStorage.removeItem("amana_guest_id");
+        console.log(`Migrated ${data.migrated} guest bot(s)`);
+      }
+    } catch (err) {
+      console.error("Failed to migrate guest bots:", err);
+      // Don't show error to user, migration can happen later
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -51,6 +81,9 @@ export default function LoginPage() {
         }
         setLoading(false);
       } else if (result?.ok) {
+        // Migrate guest bots after successful login
+        await migrateGuestBots();
+
         // Get callbackUrl from query params or default to dashboard
         const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
         // Ensure callbackUrl is a relative path (security)

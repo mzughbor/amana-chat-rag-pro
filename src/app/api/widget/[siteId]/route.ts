@@ -30,14 +30,33 @@ export async function GET(
     }
 
     if (!bot) {
-      return NextResponse.json({ error: "Bot not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Bot not found" },
+        {
+          status: 404,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type",
+          },
+        },
+      );
     }
 
-    return NextResponse.json({
-      botId: siteId, // Return botId for consistency
-      widgetSettings: bot.widgetSettings ?? {},
-      scriptEmbedId: bot.scriptEmbedId,
-    });
+    return NextResponse.json(
+      {
+        botId: siteId, // Return botId for consistency
+        widgetSettings: bot.widgetSettings ?? {},
+        scriptEmbedId: bot.scriptEmbedId,
+      },
+      {
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+        },
+      },
+    );
   } catch (error) {
     console.error("Widget config error:", error);
     return NextResponse.json(
@@ -45,8 +64,27 @@ export async function GET(
         error: "Internal server error",
         message: error instanceof Error ? error.message : "Unknown error",
       },
-      { status: 500 },
+      {
+        status: 500,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+        },
+      },
     );
   }
+}
+
+// Handle OPTIONS request for CORS preflight
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+    },
+  });
 }
 

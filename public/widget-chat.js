@@ -11,15 +11,29 @@
 
   async function fetchBotInfo(botId) {
     try {
-      const response = await fetch(`/api/bots/${botId}`);
-      if (response.ok) {
-        const data = await response.json();
-        return data;
+      // Use the public widget bot endpoint that doesn't require authentication
+      const response = await fetch(`/api/widget/bot/${botId}`);
+      
+      if (!response.ok) {
+        // Check if response is JSON before parsing
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          const errorData = await response.json();
+          console.error('Failed to fetch bot info:', errorData.error || 'Unknown error');
+        } else {
+          // If it's HTML (like a 404 page), read as text
+          const text = await response.text();
+          console.error('Failed to fetch bot info: Server returned HTML instead of JSON');
+        }
+        return null;
       }
+      
+      const data = await response.json();
+      return data;
     } catch (error) {
       console.error('Failed to fetch bot info:', error);
+      return null;
     }
-    return null;
   }
 
   function initWidget() {
@@ -246,7 +260,17 @@
         });
 
         if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
+          // Check if response is JSON before parsing
+          const contentType = response.headers.get("content-type");
+          let errorData = {};
+          if (contentType && contentType.includes("application/json")) {
+            errorData = await response.json().catch(() => ({}));
+          } else {
+            // If it's HTML (like a 404 page), read as text
+            const text = await response.text();
+            console.error('API returned HTML instead of JSON:', text.substring(0, 200));
+            errorData = { error: `HTTP ${response.status} error` };
+          }
           throw new Error(`HTTP error! status: ${response.status}, message: ${errorData.error || errorData.message || 'Unknown error'}`);
         }
 

@@ -6,6 +6,13 @@ import { supabaseRestClient } from "~/lib/supabaseRestClient";
 import OpenAI from "openai";
 import crypto from "crypto";
 
+// CORS headers for widget embedding
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
+
 type ConversationRecord = {
   id: string;
   botId?: string | null;
@@ -316,14 +323,17 @@ export async function GET(
     if (!visitorId && !providedConversationId) {
       return NextResponse.json(
         { error: "visitorId or conversationId is required" },
-        { status: 400 },
+        { status: 400, headers: corsHeaders },
       );
     }
 
     const { bot, site, useRestApi } = await getBotOrSite(contextId);
 
     if (!bot && !site) {
-      return NextResponse.json({ error: "Bot or site not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Bot or site not found" },
+        { status: 404, headers: corsHeaders },
+      );
     }
 
     const actualContextId = bot ? bot.id : contextId;
@@ -338,18 +348,24 @@ export async function GET(
     }
 
     if (!conversation) {
-      return NextResponse.json({
-        conversationId: null,
-        messages: [],
-      });
+      return NextResponse.json(
+        {
+          conversationId: null,
+          messages: [],
+        },
+        { headers: corsHeaders },
+      );
     }
 
     const rows = await fetchMessagesForConversation(conversation.id, useRestApi);
 
-    return NextResponse.json({
-      conversationId: conversation.id,
-      messages: rows.map(mapMessageRow),
-    });
+    return NextResponse.json(
+      {
+        conversationId: conversation.id,
+        messages: rows.map(mapMessageRow),
+      },
+      { headers: corsHeaders },
+    );
   } catch (error) {
     console.error("Chat GET error:", error);
     return NextResponse.json(
@@ -357,7 +373,7 @@ export async function GET(
         error: "Failed to load messages",
         message: error instanceof Error ? error.message : "Unknown error",
       },
-      { status: 500 },
+      { status: 500, headers: corsHeaders },
     );
   }
 }
@@ -375,14 +391,17 @@ export async function POST(
     if (!message || typeof message !== "string") {
       return NextResponse.json(
         { error: "Message is required" },
-        { status: 400 },
+        { status: 400, headers: corsHeaders },
       );
     }
 
     const { bot, site, useRestApi } = await getBotOrSite(contextId);
 
     if (!bot && !site) {
-      return NextResponse.json({ error: "Bot or site not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Bot or site not found" },
+        { status: 404, headers: corsHeaders },
+      );
     }
 
     // Get API key from bot or site
@@ -396,7 +415,7 @@ export async function POST(
     if (!apiKeyEncrypted) {
       return NextResponse.json(
         { error: "API key not configured for this bot/site" },
-        { status: 400 },
+        { status: 400, headers: corsHeaders },
       );
     }
 
@@ -404,7 +423,7 @@ export async function POST(
     if (!encryptionKey) {
       return NextResponse.json(
         { error: "Encryption key not configured" },
-        { status: 500 },
+        { status: 500, headers: corsHeaders },
       );
     }
 
@@ -465,13 +484,16 @@ Answer the user's question based on the context above. Be concise and helpful.`;
       useRestApi,
     );
 
-    return NextResponse.json({
-      response,
-      visitorId: visitorIdFinal,
-      conversationId: conversation.id,
-      message: assistantMessageRecord,
-      userMessage: userMessageRecord,
-    });
+    return NextResponse.json(
+      {
+        response,
+        visitorId: visitorIdFinal,
+        conversationId: conversation.id,
+        message: assistantMessageRecord,
+        userMessage: userMessageRecord,
+      },
+      { headers: corsHeaders },
+    );
   } catch (error) {
     console.error("Chat error:", error);
     return NextResponse.json(
@@ -479,7 +501,15 @@ Answer the user's question based on the context above. Be concise and helpful.`;
         error: "Internal server error",
         message: error instanceof Error ? error.message : "Unknown error",
       },
-      { status: 500 },
+      { status: 500, headers: corsHeaders },
     );
   }
+}
+
+// Handle OPTIONS request for CORS preflight
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 200,
+    headers: corsHeaders,
+  });
 }

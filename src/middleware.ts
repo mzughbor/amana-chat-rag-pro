@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 export default withAuth(
   function middleware(req) {
-    // Custom logic to exclude widget chat from auth protection
+    // Custom logic to exclude widget chat and dashboard from auth protection
     const { pathname } = req.nextUrl;
     const token = req.nextauth.token;
     
@@ -12,8 +12,8 @@ export default withAuth(
       console.log(`[Middleware] Path: ${pathname}, Has token: ${!!token}`);
     }
     
-    // If this is a widget chat route, allow it without auth
-    if (pathname.startsWith('/widget/chat/')) {
+    // Allow these routes without authentication (for guest bot creation)
+    if (pathname.startsWith('/widget/chat/') || pathname === '/dashboard') {
       return NextResponse.next();
     }
     
@@ -41,6 +41,11 @@ export default withAuth(
           console.log(`[Middleware Auth] Path: ${pathname}, Authorized: ${!!token}`);
         }
         
+        // Allow dashboard access without auth (for guest bot creation)
+        if (pathname === '/dashboard') {
+          return true;
+        }
+        
         // Allow access if token exists
         // This is critical: if token exists, allow access to /upload and /widget
         return !!token;
@@ -54,7 +59,8 @@ export default withAuth(
 
 export const config = {
   matcher: [
-    "/dashboard/:path*", 
+    // Don't protect dashboard - allow guest access
+    // "/dashboard/:path*", 
     "/upload/:path*", 
     "/api-key/:path*", 
     "/logs/:path*",

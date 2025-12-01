@@ -63,8 +63,9 @@
   // Create iframe for chat
   let chatIframe = null;
   // Use the widget-specific chat route with the contextId (either botId or siteId)
-  // Pass color and other settings as URL parameters
-  const chatUrl = `${window.location.origin}/widget/chat/${contextId}?color=${encodeURIComponent(colorParam)}&radius=${encodeURIComponent(radiusParam)}`;
+  // Always use the Render server domain instead of window.location.origin for external site embedding
+  const WIDGET_SERVER_URL = 'https://amana-chat-rag-pro-yllr.onrender.com';
+  const chatUrl = `${WIDGET_SERVER_URL}/widget/chat/${contextId}?color=${encodeURIComponent(colorParam)}&radius=${encodeURIComponent(radiusParam)}`;
 
   widgetButton.addEventListener('click', function () {
     if (chatIframe) {
